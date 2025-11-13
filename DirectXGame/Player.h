@@ -1,4 +1,5 @@
 #pragma once
+#include "Bullet.h"
 #include "MapChipField.h"
 #include "Math.h"
 
@@ -110,6 +111,15 @@ public:
 
 	void SetMapChipField(MapChipField* mapChipField) { this->mapChipField_ = mapChipField; };
 
+	int GetCurrentBullets() const { return currentBullets_; }
+	int GetMaxBullets() const { return maxBullets_; }
+	bool IsReloading() const { return isReloading_; }
+	float GetReloadTimer() const { return reloadTimer_; }
+	float GetReloadTime() const { return kReloadTime; }
+
+	// 弾リストの読み取り用アクセサ（GameScene から当たり判定に利用）
+	const std::list<Bullet*>& GetBullets() const { return bullets_; }
+
 private:
 	/*-------------- 向きに関わる系 --------------*/
 
@@ -160,6 +170,13 @@ private:
 	// ジャンプ回数
 	int jumpCount_ = 0;
 
+	float spinTimer_ = 0.0f;
+
+	// 回転時間
+	static inline const float kSpinDuration = 0.3f;
+
+	bool spinning_ = false;
+
 	/*-------------- プレイヤーの描画に関わる系 --------------*/
 
 	// モデル
@@ -167,6 +184,39 @@ private:
 
 	// カメラ
 	KamataEngine::Camera* camera_ = nullptr;
+
+	/*-------------- プレイヤーの弾に関わる系 --------------*/
+
+	// 弾のリスト
+	std::list<Bullet*> bullets_;
+
+	// 弾モデル
+	KamataEngine::Model* bulletModel_ = nullptr;
+
+	// ---- 射撃レート管理 ----
+
+	// 発射間隔(秒) 例: 0.2秒 = 約5発/秒
+	float fireInterval_ = 0.3f;
+
+	// 発射クールタイム
+	float fireTimer_ = 0.0f;
+
+	// ---- 弾管理 ----
+
+	// 最大所持弾数
+	int maxBullets_ = 10;
+
+	// 現在の弾数
+	int currentBullets_ = 10;
+
+	// リロード中
+	bool isReloading_ = false;
+
+	// リロードタイマー
+	float reloadTimer_ = 0.0f;
+
+	// リロード時間
+	static inline const float kReloadTime = 0.8f;
 
 	/*-------------- プレイヤーの当たり判定に関わる系 --------------*/
 

@@ -14,6 +14,9 @@ void Player::Initialize(Model* model, Camera* camera, const Vector3& position) {
 	model_ = model;
 	camera_ = camera;
 
+	// 弾モデルの生成
+	bulletModel_ = Model::CreateFromOBJ("Player", true);
+
 	// ワールド変換の初期化
 	worldTransformPlayer_.Initialize();
 
@@ -26,10 +29,90 @@ void Player::Initialize(Model* model, Camera* camera, const Vector3& position) {
 
 void Player::Update() {
 
-	/*-------------- キー入力 --------------*/
-
 	// 1.移動入力
 	move();
+
+	// ---- 発射クールタイム ----
+
+	if (fireTimer_ > 0.0f) {
+		// 毎フレーム経過
+		fireTimer_ -= 1.0f / 60.0f;
+	}
+
+	// ---- 弾の発射処理　----
+
+	// リロード中は発射不可
+	if (!isReloading_ && currentBullets_ > 0 && fireTimer_ <= 0.0f) {
+		if (Input::GetInstance()->PushKey(DIK_J)) {
+			// 弾の生成
+			auto* newBullet = new Bullet();
+
+			Vector3 bulletDir;
+
+			if (lrDirection_ == LRDirection::kRight) {
+				bulletDir = {1.0f, 0.0f, 0.0f}; // 右
+			} else {
+				bulletDir = {-1.0f, 0.0f, 0.0f}; // 左
+			}
+
+			newBullet->Initialize(bulletModel_, camera_, worldTransformPlayer_.translation_, bulletDir);
+
+			bullets_.push_back(newBullet);
+
+			newBullet->SetMapChipField(mapChipField_);
+
+			// 弾消費
+			currentBullets_--;
+			
+			currentBullets_ = std::max(currentBullets_, 0);
+
+			// 発射クールタイムリセット
+			fireTimer_ = fireInterval_;
+		}
+	}
+
+	// ---- リロード ----
+	if (Input::GetInstance()->TriggerKey(DIK_R) && !isReloading_) {
+
+		isReloading_ = true;
+
+		reloadTimer_ = kReloadTime;
+	}
+
+	// リロード中タイマー
+	if (isReloading_) {
+
+		reloadTimer_ -= 1.0f / 60.0f;
+
+		if (reloadTimer_ <= 0.0f) {
+
+			currentBullets_ = maxBullets_;
+
+			isReloading_ = false;
+
+			currentBullets_ = std::clamp(currentBullets_, 0, maxBullets_);
+		}
+	}
+
+	// 弾の更新
+	for (auto* bullet : bullets_) {
+
+		bullet->Update();
+	}
+
+	// 死んだ弾の削除
+	bullets_.remove_if([](Bullet* bullet) {
+		if (bullet->IsDead()) {
+
+			delete bullet;
+
+			return true;
+		}
+
+		return false;
+	});
+
+	// ----　マップの衝突判定　----
 
 	// 衝突情報を初期化
 	CollisionMapInfo collisionMapInfo;
@@ -75,36 +158,85 @@ void Player::Update() {
 	UpdateOnWall(collisionMapInfo);
 
 	/*-------------- 旋回制御 --------------*/
-	// if (turnTimer > 0.0f) {
+	if (turnTimer > 0.0f) {
 
-	//	// 1/60秒だけのタイマー減を減らす
-	//	turnTimer -= 1.0f / 60.0f;
+		// 1/60秒だけのタイマー減を減らす
+		turnTimer -= 1.0f / 60.0f;
 
-	//	if (turnTimer < 0.0f) {
+		if (turnTimer < 0.0f) {
 
-	//		turnTimer = 0.0f;
-	//	}
+			turnTimer = 0.0f;
+		}
 
-	//	// 経過割合を計算（0.0f〜1.0f）
-	//	float t = 1.0f - (turnTimer / ktimeTurn);
+		// 経過割合を計算（0.0f〜1.0f）
+		float t = 1.0f - (turnTimer / ktimeTurn);
 
-	//	// 左右の角度テーブル
-	//	float destinationRotationYTable[] = {std::numbers::pi_v<float> / 2.0f, std::numbers::pi_v<float> * 3.0f / 2.0f};
+		// 左右の角度テーブル
+		float destinationRotationYTable[] = {std::numbers::pi_v<float> / 2.0f, std::numbers::pi_v<float> * 3.0f / 2.0f};
 
-	//	// 状態に応じた角度を取得
-	//	float destinationRotationY = destinationRotationYTable[static_cast<uint32_t>(lrDirection_)];
+		// 状態に応じた角度を取得
+		float destinationRotationY = destinationRotationYTable[static_cast<uint32_t>(lrDirection_)];
 
-	//	// 自キャラの角度を設定
-	//	worldTransformPlayer_.rotation_.y = math.EaseInOut(t, turnFirstRotationY_, destinationRotationY);
-	//}
+		// 自キャラの角度を設定
+		worldTransformPlayer_.rotation_.y = math.EaseInOut(t, turnFirstRotationY_, destinationRotationY);
+	}
+
+	// 二段ジャンプ中の回転
+	if (spinning_) {
+
+		spinTimer_ -= 1.0f / 60.0f;
+
+		// 1回転 / kSpinDuration秒で回転
+		float spinSpeed = (std::numbers::pi_v<float> * 2.0f) / (60.0f * kSpinDuration);
+
+		// 向きに応じて回転方向を変える
+		if (lrDirection_ == LRDirection::kRight) {
+			// 右向き
+			worldTransformPlayer_.rotation_.z -= spinSpeed;
+		} else {
+			// 左向き
+			worldTransformPlayer_.rotation_.z += spinSpeed;
+		}
+
+		// スピン終了
+		if (spinTimer_ <= 0.0f) {
+
+			spinning_ = false;
+
+			// 最終向きを維持
+			worldTransformPlayer_.rotation_.y = (lrDirection_ == LRDirection::kRight) ? std::numbers::pi_v<float> / 2.0f : std::numbers::pi_v<float> * 3.0f / 2.0f;
+
+			// 回転はリセット
+			worldTransformPlayer_.rotation_.z = 0.0f;
+		}
+	}
 
 	// 行列の変換と転送
 	math.worldTransformUpdate(worldTransformPlayer_);
 }
 
 void Player::Draw() {
+
 	// モデルの描画
 	model_->Draw(worldTransformPlayer_, *camera_);
+
+	// ---- 弾の描画 ----
+	for (auto* bullet : bullets_) {
+		bullet->Draw();
+	}
+
+	// ---- デバッグ情報の表示 ----
+
+	/*ImGui::Begin("window");
+
+	ImGui::Text("Bullets: %d / %d", currentBullets_, maxBullets_);
+
+	if (isReloading_) {
+
+		ImGui::Text("Reloading...");
+	}
+
+	ImGui::End();*/
 }
 
 void Player::move() {
@@ -202,6 +334,11 @@ void Player::move() {
 
 			// ジャンプ回数を増やす
 			jumpCount_++;
+
+			// スピン開始
+			spinning_ = true;
+
+			spinTimer_ = kSpinDuration;
 		}
 
 		// 落下速度

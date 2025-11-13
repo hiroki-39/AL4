@@ -1,4 +1,6 @@
 #include "GameScene.h"
+#include <cmath>
+#include <algorithm>
 
 using namespace KamataEngine;
 
@@ -29,6 +31,27 @@ void GameScene::Initialize() {
 
 	// マップチップデータのセット
 	player_->SetMapChipField(mapchipField_);
+
+#pragma endregion
+
+#pragma region "敵"
+	/*-------------- 敵の初期化 --------------*/
+
+	// 3Dモデルの生成
+	modelEnemy_ = Model::CreateFromOBJ("enemy", true);
+
+	// 敵の生成
+	for (int i = 0; i < 2; i++) {
+		Enemy* newEnemy = new Enemy();
+
+		// 座標をマップチップ番号で取得
+		Vector3 enemyPosition = mapchipField_->GetMapChipPositionByIndex(30 + i * 2, 18);
+
+		// プレイヤーの初期化
+		newEnemy->Initialize(modelEnemy_, &camera_, enemyPosition);
+
+		enemies_.push_back(newEnemy);
+	}
 
 #pragma endregion
 
@@ -81,58 +104,211 @@ void GameScene::Initialize() {
 	cameraController_->Reset();
 
 #pragma endregion
+
+#pragma region "UI"
+
+	numberTexHandle[0] = TextureManager::Load("UI/Numbers/0.png");
+	numberTexHandle[1] = TextureManager::Load("UI/Numbers/1.png");
+	numberTexHandle[2] = TextureManager::Load("UI/Numbers/2.png");
+	numberTexHandle[3] = TextureManager::Load("UI/Numbers/3.png");
+	numberTexHandle[4] = TextureManager::Load("UI/Numbers/4.png");
+	numberTexHandle[5] = TextureManager::Load("UI/Numbers/5.png");
+	numberTexHandle[6] = TextureManager::Load("UI/Numbers/6.png");
+	numberTexHandle[7] = TextureManager::Load("UI/Numbers/7.png");
+	numberTexHandle[8] = TextureManager::Load("UI/Numbers/8.png");
+	numberTexHandle[9] = TextureManager::Load("UI/Numbers/9.png");
+
+	for (int i = 0; i < 10; i++) {
+		numberSprite[i] = Sprite::Create(numberTexHandle[i], {0.0f, 0.0f});
+		if (numberSprite[i]) {
+			// 左上基準で揃える（必要なら {0.5f,0.5f} にして中央基準に）
+			numberSprite[i]->SetAnchorPoint({0.0f, 0.0f});
+			// 初期サイズ（描画時に SetSize で上書きするが、念のため統一）
+			numberSprite[i]->SetSize({32.0f, 32.0f});
+		}
+	}
+
+	slashTexHandle = TextureManager::Load("UI/Numbers/slash.png");
+	slashSprite = Sprite::Create(slashTexHandle, {0.0f, 0.0f});
+	if (slashSprite) {
+		slashSprite->SetAnchorPoint({0.0f, 0.0f});
+		slashSprite->SetSize({32.0f, 32.0f});
+	}
+
+	reloadTexHandle = TextureManager::Load("UI/Numbers/reload.png");
+
+	reloadSprite = Sprite::Create(reloadTexHandle, {0.0f, 0.0f});
+
+
+#pragma endregion
+
+	// ゲームの現在フェーズ
+	phase_ = Phase::kFadeIn;
+
+	// フェードの更新
+	fade_ = new Fade();
+	fade_->Initialize();
+	fade_->Start(Fade::Status::FadeIn, 1.0f);
 }
 
 // ゲームシーンの更新
 void GameScene::Update() {
 
-	// プレイヤーの更新
-	player_->Update();
+	ChangePhase();
 
-	// ブロックの更新
-	for (std::vector<WorldTransform*>& worldTransBlockLine : worldTransformBlocks_) {
-		for (WorldTransform* worldTransformBlock : worldTransBlockLine) {
-			if (!worldTransformBlock) {
-				continue;
-			}
+	switch (phase_) {
+	case Phase::kFadeIn:
+		// フェードインの更新
 
-			math->worldTransformUpdate(*worldTransformBlock);
+		fade_->Update();
+
+		if (fade_->IsFinished()) {
+			fade_->Start(Fade::Status::FadeOut, 1.0f);
+			phase_ = Phase::kPlay;
 		}
-	}
 
-	// スカイドームの更新
-	skydome_->Update();
+		// スカイドームの更新
+		skydome_->Update();
+
+		// カメラコントローラーの更新
+		cameraController_->Update();
+
+		// プレイヤーの更新
+		player_->Update();
+
+		// 敵の更新
+		for (Enemy* enemy : enemies_) {
+			enemy->Update();
+		}
+
+		// ブロックの更新
+		for (std::vector<WorldTransform*>& worldTransBlockLine : worldTransformBlocks_) {
+			for (WorldTransform* worldTransformBlock : worldTransBlockLine) {
+				if (!worldTransformBlock) {
+					continue;
+				}
+
+				math->worldTransformUpdate(*worldTransformBlock);
+			}
+		}
+
+		break;
+	case Phase::kPlay:
+		// ゲームプレイフェーズの処理
+
+		// スカイドームの更新
+		skydome_->Update();
+
+		// プレイヤーの更新
+		player_->Update();
+
+		// 敵の更新
+		for (Enemy* enemy : enemies_) {
+			enemy->Update();
+		}
+
+		// カメラコントローラーの更新
+		cameraController_->Update();
+
+		// ブロックの更新
+		for (std::vector<WorldTransform*>& worldTransBlockLine : worldTransformBlocks_) {
+			for (WorldTransform* worldTransformBlock : worldTransBlockLine) {
+				if (!worldTransformBlock) {
+					continue;
+				}
+
+				math->worldTransformUpdate(*worldTransformBlock);
+			}
+		}
 
 #ifdef _DEBUG
 
-	if (Input::GetInstance()->TriggerKey(DIK_TAB)) {
-		// デバックカメラの有効
-		isDebugCameraActive_ = true;
-	}
+		if (Input::GetInstance()->TriggerKey(DIK_TAB)) {
+			// デバックカメラの有効
+			isDebugCameraActive_ = !isDebugCameraActive_;
+		}
 
 #endif
 
-	// カメラの更新
-	if (isDebugCameraActive_) {
-		// デバックカメラの更新
-		debugCamera_->Update();
+		// カメラの更新
+		if (isDebugCameraActive_) {
+			// デバックカメラの更新
+			debugCamera_->Update();
 
-		// カメラのワールド行列を取得
-		camera_.matView = debugCamera_->GetCamera().matView;
+			// カメラのワールド行列を取得
+			camera_.matView = debugCamera_->GetCamera().matView;
 
-		// カメラのプロジェクション行列を取得
-		camera_.matProjection = debugCamera_->GetCamera().matProjection;
+			// カメラのプロジェクション行列を取得
+			camera_.matProjection = debugCamera_->GetCamera().matProjection;
 
-		// カメラのビュー行列を転送
-		camera_.TransferMatrix();
+			// カメラのビュー行列を転送
+			camera_.TransferMatrix();
 
-	} else {
-		// ビュープロジェクション行列の更新と転送
-		camera_.UpdateMatrix();
+		} else {
+			// ビュープロジェクション行列の更新と転送
+			camera_.UpdateMatrix();
+		}
+
+		// 全ての当たり判定を行う
+		CheckAllCollisions();
+
+		// --- 追加: 全敵が死亡しているかチェック ---
+		{
+			bool allDead = true;
+			for (Enemy* enemy : enemies_) {
+				if (enemy && !enemy->IsDead()) {
+					allDead = false;
+					break;
+				}
+			}
+
+			if (allDead) {
+				// フェードアウトしてタイトルへ戻る
+				if (fade_) {
+					fade_->Start(Fade::Status::FadeOut, 1.0f);
+				}
+				phase_ = Phase::kFadeOut;
+			}
+		}
+		break;
+	case Phase::kDeath:
+		// デス演出フェーズの処理
+
+		// スカイドームの更新
+		skydome_->Update();
+
+		// カメラコントローラーの更新
+		cameraController_->Update();
+
+		// 敵の更新
+		for (Enemy* enemy : enemies_) {
+			enemy->Update();
+		}
+
+		break;
+	case Phase::kFadeOut:
+		// フェードアウトの更新
+
+		// フェードの更新
+		fade_->Update();
+
+		if (fade_->IsFinished()) {
+			finished_ = true;
+		}
+
+		// スカイドームの更新
+		skydome_->Update();
+
+		// 敵の更新
+		for (Enemy* enemy : enemies_) {
+			enemy->Update();
+		}
+
+		// カメラコントローラーの更新
+		cameraController_->Update();
+
+		break;
 	}
-
-	// カメラコントローラーの更新
-	cameraController_->Update();
 }
 
 // ゲームシーンの描画
@@ -144,6 +320,10 @@ void GameScene::Draw() {
 	// プレイヤーの描画
 	player_->Draw();
 
+	// 敵の描画
+	for (Enemy* enemy : enemies_) {
+		enemy->Draw();
+	}
 
 	// ブロックの描画
 	for (std::vector<WorldTransform*>& worldTransBlockLine : worldTransformBlocks_) {
@@ -160,8 +340,16 @@ void GameScene::Draw() {
 	// スカイドームの描画
 	skydome_->Draw();
 
+	fade_->Draw();
+
 	// 3Dモデルの後処理
 	Model::PostDraw();
+
+	Sprite::PreDraw();
+
+	DrawBulletUI();
+
+	Sprite::PostDraw();
 }
 
 // デストラクタ
@@ -189,6 +377,11 @@ GameScene::~GameScene() {
 	delete skydome_;
 
 	delete modelSkydome_;
+
+	// 敵の解放
+	for (Enemy* enemy : enemies_) {
+		delete enemy;
+	}
 
 	// マップチップフィールドの解放
 	delete mapchipField_;
@@ -226,4 +419,193 @@ void GameScene::GenetateBlocks() {
 			}
 		}
 	}
+}
+
+// そう当たり判定
+void GameScene::CheckAllCollisions() {
+
+	// 判定対象1と2の座標
+	/*AABB aabb1, aabb2;*/
+
+#pragma region 自キャラと敵キャラAの当たり判定
+	//{
+	//	// 自キャラの座標
+	//	aabb1 = player_->GetAABB();
+
+	//	// 自キャラと敵弾全ての当たり判定
+	//	for (Enemy* enemy : enemies_) {
+	//		// 敵弾の座標
+	//		aabb2 = enemy->GetAABB();
+
+	//		// 敵の衝突無効化フラグが立っているなら、衝突判定を無視
+	//		if (enemy->IsCollisionDisabled()) {
+	//			// 衝突無効化フラグの敵はスキップ
+	//			continue;
+	//		}
+
+	//		// AABB同士の交差判定
+	//		if (function.IsCollision(aabb1, aabb2)) {
+	//			// 自キャラの衝突時コールバックを呼び出す
+	//			player_->OnCollision(enemy);
+	//			// 敵弾の衝突時コールバックを呼び出す
+	//			enemy->OnCollision(player_);
+	//		}
+	//	}
+	//}
+#pragma endregion
+
+#pragma region 自弾(通常弾)と敵キャラの当たり判定
+	{
+		// プレイヤーの弾リストを取得
+		const std::list<Bullet*>& bullets = player_->GetBullets();
+
+		// 各敵に対して当たり判定
+		for (Enemy* enemy : enemies_) {
+			if (!enemy) continue;
+			if (enemy->IsDead()) continue;
+			if (enemy->IsCollisionDisabled()) continue;
+
+			AABB enemyAabb = enemy->GetAABB();
+
+			for (Bullet* bullet : bullets) {
+				if (!bullet) continue;
+				if (bullet->IsDead()) continue;
+				if (!bullet->GetIsShot()) continue;
+
+				KamataEngine::Vector3 pos = bullet->GetPosition();
+
+				// 弾（点）と敵のAABBの当たり判定（点がAABB内にあるか）
+				if (pos.x >= enemyAabb.min.x && pos.x <= enemyAabb.max.x &&
+					pos.y >= enemyAabb.min.y && pos.y <= enemyAabb.max.y &&
+					pos.z >= enemyAabb.min.z && pos.z <= enemyAabb.max.z) {
+
+					// 衝突時処理
+					enemy->OnCollision(player_);
+
+					// 弾を消す（削除は Player::Update 内の remove_if に任せる）
+					bullet->Kill();
+
+					// １つの弾で複数敵に当たらない想定 -> 内側ループを抜ける
+					break;
+				}
+			}
+		}
+	}
+#pragma endregion
+}
+
+void GameScene::ChangePhase() {
+
+	switch (phase_) {
+	case Phase::kPlay:
+		// Initialize関数のいきなりパーティクル発生処理は消す
+		// if (player_->IsDead()) {
+		//	// 死亡演出
+		//	phase_ = Phase::kDeath;
+
+		//	const Vector3& deathParticlesPosition = player_->GetWorldPosition();
+
+		//	deathParticles_ = new DeathParticles;
+		//	deathParticles_->Initialize(modelDeathParticles_, &camera_, deathParticlesPosition);
+		//}
+		break;
+	case Phase::kDeath:
+		break;
+	}
+}
+
+void GameScene::DrawNumber(int num, float x, float y, float scale) {
+	// 0..99 に制限
+	if (num < 0)
+		num = 0;
+	if (num > 99)
+		num = 99;
+
+	// 2桁固定（先頭ゼロを含める）
+	int tens = num / 10;
+	int ones = num % 10;
+
+	const float digitSize = 32.0f; // 1桁テクスチャのピクセル幅
+	const Vector2 drawSize = {digitSize * scale, digitSize * scale};
+
+	// 十の位
+	if (numberSprite[tens]) {
+		numberSprite[tens]->SetSize(drawSize);
+		numberSprite[tens]->SetPosition({x, y});
+		numberSprite[tens]->Draw();
+	}
+
+	// 一の位
+	if (numberSprite[ones]) {
+		numberSprite[ones]->SetSize(drawSize);
+		numberSprite[ones]->SetPosition({x + digitSize * scale, y});
+		numberSprite[ones]->Draw();
+	}
+}
+
+void GameScene::DrawBulletUI() {
+
+	int current = player_->GetCurrentBullets();
+	int max = player_->GetMaxBullets();
+
+	// 安全のため 0..99 に制限
+	if (current < 0)
+		current = 0;
+	if (current > 99)
+		current = 99;
+	if (max < 0)
+		max = 0;
+	if (max > 99)
+		max = 99;
+
+	Vector2 basePos = {50.0f, 650.0f};
+	const float scale = 1.0f;
+	const float digitSize = 32.0f; // 実テクスチャの1桁幅に合わせる
+	const float spacing = digitSize * scale;
+
+	// 現弾数（二桁固定）
+	DrawNumber(current, basePos.x, basePos.y, scale);
+
+	// スラッシュ：数字と同じ高さに揃える
+	if (slashSprite) {
+		slashSprite->SetSize({digitSize * scale, digitSize * scale});
+		slashSprite->SetPosition({basePos.x + spacing * 2.0f, basePos.y});
+		slashSprite->Draw();
+	}
+
+	// 最大弾数（二桁固定） スラッシュ右側に配置
+	DrawNumber(max, basePos.x + spacing * 3.0f, basePos.y, scale);
+
+	///* 追加: リロードUIの表示
+	//   リロード中ならリロードアイコンを表示し、残り時間を 0.1 秒単位で右側に表示する */
+	//if (player_ && player_->IsReloading()) {
+	//	// 残り時間（秒）を 0.1 秒単位の整数に変換（例: 0.8s -> 8）
+	//	float remaining = player_->GetReloadTimer();
+	//	int tenths = static_cast<int>(std::ceil(remaining * 10.0f));
+	//	tenths = std::clamp(tenths, 0, 99);
+
+	//	// アイコンの拡大率（ここを調整してアイコンを大きくできます）
+	//	const float reloadScale = 1.0f; // 例: 1.8倍に拡大
+	//	const float iconSize = digitSize * reloadScale;
+
+	//	// アイコン位置（スラッシュ/数字の右）
+	//	float iconX = basePos.x + spacing * 6.0f;
+
+	//	// 数字は digitSize*scale の高さなので、アイコンが大きい場合は上下中央に揃える
+	//	float iconY = basePos.y - (iconSize - digitSize * scale) * 0.5f;
+
+	//	// 残り時間テキストの X（アイコンの右に余裕を持って配置）
+	//	float textX = iconX + iconSize + 8.0f;
+
+	//	if (reloadSprite) {
+	//		reloadSprite->SetSize({iconSize, iconSize});
+	//		reloadSprite->SetPosition({iconX, iconY});
+	//		reloadSprite->Draw();
+	//	}
+
+	//	// 残り時間を数字で表示（0..99 の DrawNumber に合わせる）
+	//	DrawNumber(tenths, textX, basePos.y, scale);
+	//}
+
+	/*printf("Current=%d, Max=%d\n", current, max);*/
 }
