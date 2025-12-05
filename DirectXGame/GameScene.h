@@ -40,10 +40,6 @@ public:
 
 	void ChangePhase();
 
-	void DrawNumber(int num, float x, float y, float scale);
-
-	void DrawBulletUI();
-
 	// デスフラグのgetter
 	bool IsFinished() const { return finished_; }
 
@@ -117,6 +113,10 @@ private:
 	uint32_t numberTexHandle[10];
 
 	KamataEngine::Sprite* numberSprite[10];
+
+	uint32_t maxNumberTexHandle[10];
+
+	KamataEngine::Sprite* maxNumberSprite[10];
 
 	uint32_t slashTexHandle;
 

@@ -1,6 +1,6 @@
 #include "GameScene.h"
-#include <cmath>
 #include <algorithm>
+#include <cmath>
 
 using namespace KamataEngine;
 
@@ -119,26 +119,36 @@ void GameScene::Initialize() {
 	numberTexHandle[9] = TextureManager::Load("UI/Numbers/9.png");
 
 	for (int i = 0; i < 10; i++) {
+
 		numberSprite[i] = Sprite::Create(numberTexHandle[i], {0.0f, 0.0f});
-		if (numberSprite[i]) {
-			// 左上基準で揃える（必要なら {0.5f,0.5f} にして中央基準に）
-			numberSprite[i]->SetAnchorPoint({0.0f, 0.0f});
-			// 初期サイズ（描画時に SetSize で上書きするが、念のため統一）
-			numberSprite[i]->SetSize({32.0f, 32.0f});
-		}
+		numberSprite[i]->SetSize({48.0f, 48.0f});
+	}
+
+	maxNumberTexHandle[0] = TextureManager::Load("UI/Numbers/0.png");
+	maxNumberTexHandle[1] = TextureManager::Load("UI/Numbers/1.png");
+	maxNumberTexHandle[2] = TextureManager::Load("UI/Numbers/2.png");
+	maxNumberTexHandle[3] = TextureManager::Load("UI/Numbers/3.png");
+	maxNumberTexHandle[4] = TextureManager::Load("UI/Numbers/4.png");
+	maxNumberTexHandle[5] = TextureManager::Load("UI/Numbers/5.png");
+	maxNumberTexHandle[6] = TextureManager::Load("UI/Numbers/6.png");
+	maxNumberTexHandle[7] = TextureManager::Load("UI/Numbers/7.png");
+	maxNumberTexHandle[8] = TextureManager::Load("UI/Numbers/8.png");
+	maxNumberTexHandle[9] = TextureManager::Load("UI/Numbers/9.png");
+
+	for (int i = 0; i < 10; i++) {
+		maxNumberSprite[i] = Sprite::Create(maxNumberTexHandle[i], {0.0f, 0.0f});
+		maxNumberSprite[i]->SetSize({48.0f, 48.0f});
 	}
 
 	slashTexHandle = TextureManager::Load("UI/Numbers/slash.png");
+
 	slashSprite = Sprite::Create(slashTexHandle, {0.0f, 0.0f});
-	if (slashSprite) {
-		slashSprite->SetAnchorPoint({0.0f, 0.0f});
-		slashSprite->SetSize({32.0f, 32.0f});
-	}
+	slashSprite->SetSize({48.0f, 48.0f});
 
 	reloadTexHandle = TextureManager::Load("UI/Numbers/reload.png");
 
 	reloadSprite = Sprite::Create(reloadTexHandle, {0.0f, 0.0f});
-
+	reloadSprite->SetSize({40.0f, 40.0f});
 
 #pragma endregion
 
@@ -347,7 +357,45 @@ void GameScene::Draw() {
 
 	Sprite::PreDraw();
 
-	DrawBulletUI();
+    int current = player_->GetCurrentBullets();
+	int max = player_->GetMaxBullets();
+
+	// 位置（左から順に配置）
+	Vector2 basePos = {40.0f, 670.0f};
+	//float size = 48.0f;
+	float spacing = 40.0f;
+
+	// ---- 現在弾数（左） ----
+	int curTens = current / 10;
+	int curOnes = current % 10;
+
+	if (current >= 10) {
+		numberSprite[curTens]->SetPosition(basePos);
+		numberSprite[curTens]->Draw();
+		numberSprite[curOnes]->SetPosition({basePos.x + spacing, basePos.y});
+		numberSprite[curOnes]->Draw();
+	} else {
+		numberSprite[curOnes]->SetPosition(basePos);
+		numberSprite[curOnes]->Draw();
+	}
+
+	// ---- スラッシュ ----
+	slashSprite->SetPosition({basePos.x + spacing * 2, basePos.y});
+	slashSprite->Draw();
+
+	// ---- 最大弾数（右） ----
+	int maxTens = max / 10;
+	int maxOnes = max % 10;
+
+	if (max >= 10) {
+		maxNumberSprite[maxTens]->SetPosition({basePos.x + spacing * 3, basePos.y});
+		maxNumberSprite[maxTens]->Draw();
+		maxNumberSprite[maxOnes]->SetPosition({basePos.x + spacing * 4, basePos.y});
+		maxNumberSprite[maxOnes]->Draw();
+	} else {
+		maxNumberSprite[maxOnes]->SetPosition({basePos.x + spacing * 3, basePos.y});
+		maxNumberSprite[maxOnes]->Draw();
+	}
 
 	Sprite::PostDraw();
 }
@@ -385,6 +433,9 @@ GameScene::~GameScene() {
 
 	// マップチップフィールドの解放
 	delete mapchipField_;
+	for (uint32_t i = 0; i < 10; i++) {
+		delete numberSprite[i];
+	}
 }
 
 void GameScene::GenetateBlocks() {
@@ -461,23 +512,27 @@ void GameScene::CheckAllCollisions() {
 
 		// 各敵に対して当たり判定
 		for (Enemy* enemy : enemies_) {
-			if (!enemy) continue;
-			if (enemy->IsDead()) continue;
-			if (enemy->IsCollisionDisabled()) continue;
+			if (!enemy)
+				continue;
+			if (enemy->IsDead())
+				continue;
+			if (enemy->IsCollisionDisabled())
+				continue;
 
 			AABB enemyAabb = enemy->GetAABB();
 
 			for (Bullet* bullet : bullets) {
-				if (!bullet) continue;
-				if (bullet->IsDead()) continue;
-				if (!bullet->GetIsShot()) continue;
+				if (!bullet)
+					continue;
+				if (bullet->IsDead())
+					continue;
+				if (!bullet->GetIsShot())
+					continue;
 
 				KamataEngine::Vector3 pos = bullet->GetPosition();
 
 				// 弾（点）と敵のAABBの当たり判定（点がAABB内にあるか）
-				if (pos.x >= enemyAabb.min.x && pos.x <= enemyAabb.max.x &&
-					pos.y >= enemyAabb.min.y && pos.y <= enemyAabb.max.y &&
-					pos.z >= enemyAabb.min.z && pos.z <= enemyAabb.max.z) {
+				if (pos.x >= enemyAabb.min.x && pos.x <= enemyAabb.max.x && pos.y >= enemyAabb.min.y && pos.y <= enemyAabb.max.y && pos.z >= enemyAabb.min.z && pos.z <= enemyAabb.max.z) {
 
 					// 衝突時処理
 					enemy->OnCollision(player_);
@@ -512,100 +567,4 @@ void GameScene::ChangePhase() {
 	case Phase::kDeath:
 		break;
 	}
-}
-
-void GameScene::DrawNumber(int num, float x, float y, float scale) {
-	// 0..99 に制限
-	if (num < 0)
-		num = 0;
-	if (num > 99)
-		num = 99;
-
-	// 2桁固定（先頭ゼロを含める）
-	int tens = num / 10;
-	int ones = num % 10;
-
-	const float digitSize = 32.0f; // 1桁テクスチャのピクセル幅
-	const Vector2 drawSize = {digitSize * scale, digitSize * scale};
-
-	// 十の位
-	if (numberSprite[tens]) {
-		numberSprite[tens]->SetSize(drawSize);
-		numberSprite[tens]->SetPosition({x, y});
-		numberSprite[tens]->Draw();
-	}
-
-	// 一の位
-	if (numberSprite[ones]) {
-		numberSprite[ones]->SetSize(drawSize);
-		numberSprite[ones]->SetPosition({x + digitSize * scale, y});
-		numberSprite[ones]->Draw();
-	}
-}
-
-void GameScene::DrawBulletUI() {
-
-	int current = player_->GetCurrentBullets();
-	int max = player_->GetMaxBullets();
-
-	// 安全のため 0..99 に制限
-	if (current < 0)
-		current = 0;
-	if (current > 99)
-		current = 99;
-	if (max < 0)
-		max = 0;
-	if (max > 99)
-		max = 99;
-
-	Vector2 basePos = {50.0f, 650.0f};
-	const float scale = 1.0f;
-	const float digitSize = 32.0f; // 実テクスチャの1桁幅に合わせる
-	const float spacing = digitSize * scale;
-
-	// 現弾数（二桁固定）
-	DrawNumber(current, basePos.x, basePos.y, scale);
-
-	// スラッシュ：数字と同じ高さに揃える
-	if (slashSprite) {
-		slashSprite->SetSize({digitSize * scale, digitSize * scale});
-		slashSprite->SetPosition({basePos.x + spacing * 2.0f, basePos.y});
-		slashSprite->Draw();
-	}
-
-	// 最大弾数（二桁固定） スラッシュ右側に配置
-	DrawNumber(max, basePos.x + spacing * 3.0f, basePos.y, scale);
-
-	///* 追加: リロードUIの表示
-	//   リロード中ならリロードアイコンを表示し、残り時間を 0.1 秒単位で右側に表示する */
-	//if (player_ && player_->IsReloading()) {
-	//	// 残り時間（秒）を 0.1 秒単位の整数に変換（例: 0.8s -> 8）
-	//	float remaining = player_->GetReloadTimer();
-	//	int tenths = static_cast<int>(std::ceil(remaining * 10.0f));
-	//	tenths = std::clamp(tenths, 0, 99);
-
-	//	// アイコンの拡大率（ここを調整してアイコンを大きくできます）
-	//	const float reloadScale = 1.0f; // 例: 1.8倍に拡大
-	//	const float iconSize = digitSize * reloadScale;
-
-	//	// アイコン位置（スラッシュ/数字の右）
-	//	float iconX = basePos.x + spacing * 6.0f;
-
-	//	// 数字は digitSize*scale の高さなので、アイコンが大きい場合は上下中央に揃える
-	//	float iconY = basePos.y - (iconSize - digitSize * scale) * 0.5f;
-
-	//	// 残り時間テキストの X（アイコンの右に余裕を持って配置）
-	//	float textX = iconX + iconSize + 8.0f;
-
-	//	if (reloadSprite) {
-	//		reloadSprite->SetSize({iconSize, iconSize});
-	//		reloadSprite->SetPosition({iconX, iconY});
-	//		reloadSprite->Draw();
-	//	}
-
-	//	// 残り時間を数字で表示（0..99 の DrawNumber に合わせる）
-	//	DrawNumber(tenths, textX, basePos.y, scale);
-	//}
-
-	/*printf("Current=%d, Max=%d\n", current, max);*/
 }

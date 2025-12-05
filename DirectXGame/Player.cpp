@@ -14,6 +14,10 @@ void Player::Initialize(Model* model, Camera* camera, const Vector3& position) {
 	model_ = model;
 	camera_ = camera;
 
+	// 矢印スプライトの生成
+	arrowHandle = TextureManager::GetInstance()->Load("UI/arrow.png");
+	arrowSprite = Sprite::Create(arrowHandle, {0.0f,0.0f});
+
 	// 弾モデルの生成
 	bulletModel_ = Model::CreateFromOBJ("Player", true);
 
@@ -32,6 +36,15 @@ void Player::Update() {
 	// 1.移動入力
 	move();
 
+	// Eキーで通常弾とワイヤーモード切り替え
+	if (Input::GetInstance()->TriggerKey(DIK_E)) {
+		if (fireMode_ == FireMode::Normal) {
+			fireMode_ = FireMode::Wire;
+		} else {
+			fireMode_ = FireMode::Normal;
+		}
+	}
+
 	// ---- 発射クールタイム ----
 
 	if (fireTimer_ > 0.0f) {
@@ -39,44 +52,78 @@ void Player::Update() {
 		fireTimer_ -= 1.0f / 60.0f;
 	}
 
-	// ---- 弾の発射処理　----
+	// ---- ワイヤーモード処理 ----
+	// ワイヤー角度の更新
+	if (fireMode_ == FireMode::Wire) {
 
-	// リロード中は発射不可
-	if (!isReloading_ && currentBullets_ > 0 && fireTimer_ <= 0.0f) {
-		if (Input::GetInstance()->PushKey(DIK_J)) {
-			// 弾の生成
-			auto* newBullet = new Bullet();
-
-			Vector3 bulletDir;
-
-			if (lrDirection_ == LRDirection::kRight) {
-				bulletDir = {1.0f, 0.0f, 0.0f}; // 右
-			} else {
-				bulletDir = {-1.0f, 0.0f, 0.0f}; // 左
+		if (wireAngleUp_) {
+			wireAngle_ += wireAngleSpeed_;
+			if (wireAngle_ >= 90.0f) {
+				wireAngleUp_ = false;
 			}
 
-			newBullet->Initialize(bulletModel_, camera_, worldTransformPlayer_.translation_, bulletDir);
-
-			bullets_.push_back(newBullet);
-
-			newBullet->SetMapChipField(mapChipField_);
-
-			// 弾消費
-			currentBullets_--;
-			
-			currentBullets_ = std::max(currentBullets_, 0);
-
-			// 発射クールタイムリセット
-			fireTimer_ = fireInterval_;
+		} else {
+			wireAngle_ -= wireAngleSpeed_;
+			if (wireAngle_ <= 0.0f) {
+				wireAngleUp_ = true;
+			}
 		}
 	}
 
-	// ---- リロード ----
-	if (Input::GetInstance()->TriggerKey(DIK_R) && !isReloading_) {
+	// ---- 弾の発射処理とワイヤーの発射処理　----
+	if (fireMode_ == FireMode::Normal) {
+		// リロード中は発射不可
+		if (!isReloading_ && currentBullets_ > 0 && fireTimer_ <= 0.0f) {
+			if (Input::GetInstance()->PushKey(DIK_J)) {
+				// 弾の生成
+				auto* newBullet = new Bullet();
 
-		isReloading_ = true;
+				Vector3 bulletDir;
 
-		reloadTimer_ = kReloadTime;
+				if (lrDirection_ == LRDirection::kRight) {
+					bulletDir = {1.0f, 0.0f, 0.0f}; // 右
+				} else {
+					bulletDir = {-1.0f, 0.0f, 0.0f}; // 左
+				}
+
+				newBullet->Initialize(bulletModel_, camera_, worldTransformPlayer_.translation_, bulletDir);
+
+				bullets_.push_back(newBullet);
+
+				newBullet->SetMapChipField(mapChipField_);
+
+				// 弾消費
+				currentBullets_--;
+
+				currentBullets_ = std::max(currentBullets_, 0);
+
+				// 発射クールタイムリセット
+				fireTimer_ = fireInterval_;
+			}
+		}
+
+		// ---- リロード ----
+		if (Input::GetInstance()->TriggerKey(DIK_R) && !isReloading_) {
+
+			isReloading_ = true;
+
+			reloadTimer_ = kReloadTime;
+		}
+
+	} else if (fireMode_ == FireMode::Wire) {
+		if (Input::GetInstance()->TriggerKey(DIK_J)) {
+
+			// 角度（度 → ラジアン）
+			float rad = wireAngle_ * (3.14159f / 180.0f);
+
+			// プレイヤーの向いている左右方向
+			float dirX = (lrDirection_ == LRDirection::kRight) ? 1.0f : -1.0f;
+
+			// ワイヤー方向ベクトル
+			Vector3 wireDir = {dirX * cosf(rad), sinf(rad), 0.0f};
+
+			ShootWire(wireDir); // ワイヤー射出処理
+		}
 	}
 
 	// リロード中タイマー
@@ -211,6 +258,55 @@ void Player::Update() {
 		}
 	}
 
+	// ----------------------
+	//   ワイヤー追跡
+	// ----------------------
+	if (wireMode_ == WireMode::Shot) {
+
+		// ワイヤー先端を伸ばす
+		wireTipPos_ += wireDir_ * wireSpeed_;
+
+		// プレイヤーからの距離が最大射程を超えたら終了
+		float dist = math.Length(wireTipPos_ - worldTransformPlayer_.translation_);
+		if (dist > wireMaxDistance_) {
+			wireMode_ = WireMode::None;
+			return;
+		}
+
+		// マップ衝突チェック
+		IndexSet idx = mapChipField_->GetMapChipIndexSetByPosition(wireTipPos_);
+		MapChipType type = mapChipField_->GetMapChipTypeByIndex(idx.xIndex, idx.yIndex);
+
+		// ブロックに当たったら刺さる
+		if (type == MapChipType::kBlock) {
+
+			wireHitPos_ = wireTipPos_; // 刺さり位置を保存
+			wireMode_ = WireMode::Pulling;
+
+			// 慣性を一旦止める ↑飛ぶと変になるため
+			velocity_ = {0, 0, 0};
+		}
+
+	} else if (wireMode_ == WireMode::Pulling) {
+
+		// ワイヤーの刺さり位置へ向かうベクトル
+		Vector3 toHook = wireHitPos_ - worldTransformPlayer_.translation_;
+		float dist = math.Length(toHook);
+
+		// 正規化
+		Vector3 dir = math.Normalize(toHook);
+
+		// プレイヤーを移動
+		worldTransformPlayer_.translation_ += dir * wirePullSpeed_;
+
+		// 近づいたらワイヤー解除
+		if (dist < 0.5f) {
+			wireMode_ = WireMode::None;
+		}
+	}
+
+
+
 	// 行列の変換と転送
 	math.worldTransformUpdate(worldTransformPlayer_);
 }
@@ -233,7 +329,7 @@ void Player::Draw() {
 
 	if (isReloading_) {
 
-		ImGui::Text("Reloading...");
+	    ImGui::Text("Reloading...");
 	}
 
 	ImGui::End();*/
@@ -704,4 +800,15 @@ void Player::UpdateOnWall(const CollisionMapInfo& info) {
 	if (info.hitWall) {
 		velocity_.x *= (1.0f - kAttenuationWall);
 	}
+}
+
+void Player::ShootWire(const Vector3& dir) {
+	wireMode_ = WireMode::Shot;
+
+	// ワイヤーの初期位置はプレイヤー位置
+	wireTipPos_ = worldTransformPlayer_.translation_;
+
+	// 方向ベクトル（正規化）
+	Vector3 nd = math.Normalize(dir);
+	wireDir_ = nd; // 保存
 }

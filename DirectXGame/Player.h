@@ -8,6 +8,10 @@ enum class LRDirection {
 	kLeft,
 };
 
+enum class FireMode { Normal, Wire };
+
+enum class WireMode { None, Shot, Pulling };
+
 // マップとの当たり判定情報
 struct CollisionMapInfo {
 	bool ceilingCollision = false;  // 天井衝突フラグ
@@ -103,6 +107,8 @@ public:
 	/// <param name="info"></param>
 	void UpdateOnWall(const CollisionMapInfo& info);
 
+	void ShootWire(const KamataEngine::Vector3& dir);
+
 	/*-------------- アクセッサ --------------*/
 
 	KamataEngine::WorldTransform& GetWorldTransform() { return worldTransformPlayer_; }
@@ -116,11 +122,16 @@ public:
 	bool IsReloading() const { return isReloading_; }
 	float GetReloadTimer() const { return reloadTimer_; }
 	float GetReloadTime() const { return kReloadTime; }
-
 	// 弾リストの読み取り用アクセサ（GameScene から当たり判定に利用）
 	const std::list<Bullet*>& GetBullets() const { return bullets_; }
 
 private:
+
+	/*---  ---*/
+	uint32_t arrowHandle;
+
+	KamataEngine::Sprite* arrowSprite;
+
 	/*-------------- 向きに関わる系 --------------*/
 
 	// 向き
@@ -218,6 +229,32 @@ private:
 	// リロード時間
 	static inline const float kReloadTime = 0.8f;
 
+	/*-------------- ワイヤーモードに関わる系 --------------*/
+	FireMode fireMode_ = FireMode::Normal;
+	WireMode wireMode_ = WireMode::None;
+
+	// ワイヤー角度関連
+	float wireAngle_ = 0.0f;      // 現在角度（0～90度）
+	float wireAngleSpeed_ = 1.5f; // 揺れる速度
+	bool wireAngleUp_ = true;     // 上昇中？
+
+	// ワイヤーの方向
+	KamataEngine::Vector3 wireDir_ = {};
+
+	// ワイヤーの先端位置
+	KamataEngine::Vector3 wireTipPos_ = {};
+
+	// ワイヤーが刺さった位置
+	KamataEngine::Vector3 wireHitPos_ = {};
+
+	// ワイヤーの飛行速度
+	float wireSpeed_ = 0.6f;
+
+	// ワイヤーの最大射程
+	float wireMaxDistance_ = 25.0f;
+
+	// プル（引っ張り）速度
+	float wirePullSpeed_ = 0.4f;
 	/*-------------- プレイヤーの当たり判定に関わる系 --------------*/
 
 	// マップチップによるフィールド
