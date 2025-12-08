@@ -323,17 +323,17 @@ void GameScene::Update() {
 
 // ゲームシーンの描画
 void GameScene::Draw() {
-
 	// 3Dモデル描画前処理
 	Model::PreDraw(Model::CullingMode::kBack, Model::BlendMode::kNone, Model::DepthTestMode::kOn);
 
-	// プレイヤーの描画
-	player_->Draw();
+	// スカイドームの描画
+	skydome_->Draw();
+	
+	// 3Dモデルの後処理
+	Model::PostDraw();
 
-	// 敵の描画
-	for (Enemy* enemy : enemies_) {
-		enemy->Draw();
-	}
+	// 3Dモデル描画前処理
+	Model::PreDraw(Model::CullingMode::kBack, Model::BlendMode::kNone, Model::DepthTestMode::kOn);
 
 	// ブロックの描画
 	for (std::vector<WorldTransform*>& worldTransBlockLine : worldTransformBlocks_) {
@@ -347,8 +347,24 @@ void GameScene::Draw() {
 		}
 	}
 
-	// スカイドームの描画
-	skydome_->Draw();
+	// 3Dモデルの後処理
+	Model::PostDraw();
+
+	// 3Dモデル描画前処理
+	Model::PreDraw(Model::CullingMode::kBack, Model::BlendMode::kNone, Model::DepthTestMode::kOn);
+
+	// プレイヤーの描画
+	player_->Draw();
+
+	// 3Dモデルの後処理
+	Model::PostDraw();
+
+	Model::PreDraw(Model::CullingMode::kBack, Model::BlendMode::kNone, Model::DepthTestMode::kOn);
+
+	// 敵の描画
+	for (Enemy* enemy : enemies_) {
+		enemy->Draw();
+	}
 
 	fade_->Draw();
 
@@ -357,12 +373,12 @@ void GameScene::Draw() {
 
 	Sprite::PreDraw();
 
-    int current = player_->GetCurrentBullets();
+	int current = player_->GetCurrentBullets();
 	int max = player_->GetMaxBullets();
 
 	// 位置（左から順に配置）
 	Vector2 basePos = {40.0f, 670.0f};
-	//float size = 48.0f;
+	// float size = 48.0f;
 	float spacing = 40.0f;
 
 	// ---- 現在弾数（左） ----

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <numbers>
+#include <cmath>
 
 using namespace KamataEngine;
 
@@ -17,6 +18,12 @@ void Player::Initialize(Model* model, Camera* camera, const Vector3& position) {
 	// 矢印スプライトの生成
 	arrowHandle = TextureManager::GetInstance()->Load("UI/arrow.png");
 	arrowSprite = Sprite::Create(arrowHandle, {0.0f,0.0f});
+	// 矢印サイズ（適宜調整）
+	arrowSprite->SetSize({48.0f, 48.0f});
+
+	// 重要: 回転・位置ズレを防ぐため中心を基準にする
+	// (スプライトの回転や拡大時に左上基準だと見た目がずれる)
+	arrowSprite->SetAnchorPoint({0.5f, 0.5f});
 
 	// 弾モデルの生成
 	bulletModel_ = Model::CreateFromOBJ("Player", true);
@@ -109,7 +116,7 @@ void Player::Update() {
 
 			reloadTimer_ = kReloadTime;
 		}
-
+			
 	} else if (fireMode_ == FireMode::Wire) {
 		if (Input::GetInstance()->TriggerKey(DIK_J)) {
 
@@ -120,7 +127,8 @@ void Player::Update() {
 			float dirX = (lrDirection_ == LRDirection::kRight) ? 1.0f : -1.0f;
 
 			// ワイヤー方向ベクトル
-			Vector3 wireDir = {dirX * cosf(rad), sinf(rad), 0.0f};
+			// Y成分を常に上向き（正）にする
+			Vector3 wireDir = {dirX * cosf(rad), fabsf(sinf(rad)), 0.0f};
 
 			ShootWire(wireDir); // ワイヤー射出処理
 		}
@@ -175,8 +183,18 @@ void Player::Update() {
 		wallKickCooldown_ -= 1.0f / 60.0f;
 	}
 
+	// ワイヤーで壁に当たった直後の許可時間を減らす
+	if (wallTouchFromWireTimer_ > 0.0f) {
+		wallTouchFromWireTimer_ -= 1.0f / 60.0f;
+		if (wallTouchFromWireTimer_ <= 0.0f) {
+			wallTouchFromWire_ = false;
+			wallTouchFromWireTimer_ = 0.0f;
+		}
+	}
+
 	// 壁キック入力処理
-	if (!onGround_ && collisionMapInfo.hitWall && Input::GetInstance()->PushKey(DIK_SPACE) && canWallKick_ && wallKickCooldown_ <= 0.0f) {
+	// 変更点: 通常のマップ当たり判定に加え、ワイヤーで当たった直後でも壁ジャンプ可能にする
+	if (!onGround_ && (collisionMapInfo.hitWall || wallTouchFromWire_) && Input::GetInstance()->PushKey(DIK_SPACE) && canWallKick_ && wallKickCooldown_ <= 0.0f) {
 
 		// 壁の反対方向へ横方向初速を与え、上方向の初速を与える
 		velocity_.y = kWallKickVertical;
@@ -188,6 +206,10 @@ void Player::Update() {
 
 		// 方向も反転
 		lrDirection_ = (wallTouchDirection_ == LRDirection::kRight) ? LRDirection::kLeft : LRDirection::kRight;
+
+		// ワイヤー直当たりフラグは消しておく
+		wallTouchFromWire_ = false;
+		wallTouchFromWireTimer_ = 0.0f;
 	}
 
 	// 3.移動
@@ -223,6 +245,7 @@ void Player::Update() {
 
 		// 状態に応じた角度を取得
 		float destinationRotationY = destinationRotationYTable[static_cast<uint32_t>(lrDirection_)];
+
 
 		// 自キャラの角度を設定
 		worldTransformPlayer_.rotation_.y = math.EaseInOut(t, turnFirstRotationY_, destinationRotationY);
@@ -293,15 +316,55 @@ void Player::Update() {
 		Vector3 toHook = wireHitPos_ - worldTransformPlayer_.translation_;
 		float dist = math.Length(toHook);
 
-		// 正規化
-		Vector3 dir = math.Normalize(toHook);
-
-		// プレイヤーを移動
-		worldTransformPlayer_.translation_ += dir * wirePullSpeed_;
-
-		// 近づいたらワイヤー解除
-		if (dist < 0.5f) {
+		// 近づいたらワイヤー解除（閾値を事前チェック）
+		const float pullReleaseDistance = 0.5f;
+		if (dist < pullReleaseDistance) {
+			// 目的地に到達したので解除
 			wireMode_ = WireMode::None;
+		} else {
+			// 正規化（距離が非常に小さい場合はゼロベクトルを使う）
+			Vector3 dir = (dist > 1e-6f) ? math.Normalize(toHook) : Vector3{0.0f, 0.0f, 0.0f};
+
+			// ワイヤーで引っ張る移動を「衝突判定あり」で行う
+			CollisionMapInfo pullInfo;
+			pullInfo.velocity = dir * wirePullSpeed_;
+			pullInfo.landing = false;
+			pullInfo.hitWall = false;
+			pullInfo.ceilingCollision = false;
+
+			// 衝突判定（マップとの干渉を検査）
+			CollisionDetection(pullInfo);
+
+			// 衝突によって移動できない・接触した場合の処理
+			if (pullInfo.hitWall || pullInfo.landing || pullInfo.ceilingCollision) {
+
+				// ワイヤー移動を解除
+				wireMode_ = WireMode::None;
+
+				// 衝突時は慣性を止める（安全のため）
+				velocity_ = {0.0f, 0.0f, 0.0f};
+
+				// 壁触れ情報（CollisionDetection 内で wallTouchDirection_ は更新される）
+				wallTouchFromWire_ = true;
+				wallTouchFromWireTimer_ = kWallTouchFromWireWindow;
+
+				// 壁ジャンプ許可（通常の canWallKick_ と同様）
+				canWallKick_ = true;
+
+				// onGround_ は false のままにする（空中扱い）
+				onGround_ = false;
+
+			} else {
+				// 移動量を適用（衝突処理で調整済み）
+				worldTransformPlayer_.translation_ += pullInfo.velocity;
+
+				// 物理速度としても保存（次フレームの衝突処理などに利用）
+				velocity_ = pullInfo.velocity;
+
+				// 接地・壁の状態を更新
+				UpdateOnGround(pullInfo);
+				UpdateOnWall(pullInfo);
+			}
 		}
 	}
 
@@ -319,6 +382,46 @@ void Player::Draw() {
 	// ---- 弾の描画 ----
 	for (auto* bullet : bullets_) {
 		bullet->Draw();
+	}
+
+	// ---- ワイヤー狙い用の矢印表示 ----
+	// ワイヤーモードで、まだワイヤーを射出していない（狙い中）の場合に表示
+	if (fireMode_ == FireMode::Wire && wireMode_ == WireMode::None) {
+		// 矢印をプレイヤー上に表示するためのワールド位置（プレイヤーの頭上）
+		Vector3 worldPos = worldTransformPlayer_.translation_;
+		worldPos.y += (kHeight / 2.0f + 0.5f); // 上方オフセット（必要に応じて調整）
+
+		// world -> view -> proj の順で変換し、NDC を得る
+		Vector3 viewPos = math.Transform(worldPos, camera_->matView);
+		Vector3 projPos = math.Transform(viewPos, camera_->matProjection);
+
+		// NDC (-1..+1) をスクリーン座標に変換
+		float screenX = (projPos.x + 1.0f) * 0.5f * static_cast<float>(WinApp::kWindowWidth);
+		float screenY = (1.0f - (projPos.y + 1.0f) * 0.5f) * static_cast<float>(WinApp::kWindowHeight);
+
+		// スプライトの設定
+		// anchor を中央にしているため、SetPosition にそのままスクリーン座標を渡せば
+		// 回転しても描画位置がずれない
+		arrowSprite->SetPosition({screenX, screenY});
+
+		// 回転：ワイヤー実際の発射ベクトル（Draw時点の狙い方向）から角度を算出して適用
+		// 実際の射出時と同じ計算を使う（Yは上向きに固定）
+		float rad = wireAngle_ * (3.14159f / 180.0f);
+		float dirX = (lrDirection_ == LRDirection::kRight) ? 1.0f : -1.0f;
+		// 目標方向ベクトル（ShootWire と同じ）
+		float vx = dirX * cosf(rad);
+		float vy = fabsf(sinf(rad)); // 常に上向きにする
+		// atan2f( y, x ) で角度を取得（+x を基準に反時計回り）
+		float angleRad = atan2f(vy, vx);
+
+		// 環境によってスプライト回転の正負が逆なので、ここでは -angleRad をセットしている。
+		// 必要なら +angleRad に切り替えてください。
+		arrowSprite->SetRotation(-angleRad);
+
+		// 描画（スプライト描画状態にする）
+		Sprite::PreDraw();
+		arrowSprite->Draw();
+		Sprite::PostDraw();
 	}
 
 	// ---- デバッグ情報の表示 ----
