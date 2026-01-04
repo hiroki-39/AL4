@@ -2,8 +2,9 @@
 #include "Player.h"
 #include <algorithm>
 #include <cassert>
-#include <numbers>
 #include <cmath>
+#include <numbers>
+#include <vector>
 
 using namespace KamataEngine;
 
@@ -17,7 +18,7 @@ void Player::Initialize(Model* model, Camera* camera, const Vector3& position) {
 
 	// 矢印スプライトの生成
 	arrowHandle = TextureManager::GetInstance()->Load("UI/arrow.png");
-	arrowSprite = Sprite::Create(arrowHandle, {0.0f,0.0f});
+	arrowSprite = Sprite::Create(arrowHandle, {0.0f, 0.0f});
 	// 矢印サイズ（適宜調整）
 	arrowSprite->SetSize({48.0f, 48.0f});
 
@@ -43,7 +44,7 @@ void Player::Update() {
 	// 1.移動入力
 	move();
 
-	// Eキーで通常弾とワイヤーモード切り替え
+	// Eキーで通常弾とワイヤーモード切替
 	if (Input::GetInstance()->TriggerKey(DIK_E)) {
 		if (fireMode_ == FireMode::Normal) {
 			fireMode_ = FireMode::Wire;
@@ -116,7 +117,7 @@ void Player::Update() {
 
 			reloadTimer_ = kReloadTime;
 		}
-			
+
 	} else if (fireMode_ == FireMode::Wire) {
 		if (Input::GetInstance()->TriggerKey(DIK_J)) {
 
@@ -155,17 +156,10 @@ void Player::Update() {
 		bullet->Update();
 	}
 
-	// 死んだ弾の削除
-	bullets_.remove_if([](Bullet* bullet) {
-		if (bullet->IsDead()) {
-
-			delete bullet;
-
-			return true;
-		}
-
-		return false;
-	});
+	// Note:
+	// 死んだ弾の削除は Update の最後にまとめて行うようにしました。
+	// これにより同一ポインタを複数箇所で delete してしまう事態（double delete）を避け、
+	// wire 処理での削除は「IsDead() を立てる」だけに統一します。
 
 	// ----　マップの衝突判定　----
 
@@ -246,7 +240,6 @@ void Player::Update() {
 		// 状態に応じた角度を取得
 		float destinationRotationY = destinationRotationYTable[static_cast<uint32_t>(lrDirection_)];
 
-
 		// 自キャラの角度を設定
 		worldTransformPlayer_.rotation_.y = math.EaseInOut(t, turnFirstRotationY_, destinationRotationY);
 	}
@@ -285,29 +278,75 @@ void Player::Update() {
 	//   ワイヤー追跡
 	// ----------------------
 	if (wireMode_ == WireMode::Shot) {
+		// 射出用弾が存在するかをチェック。弾自身の当たり判定で刺さったら hooked_ が立つ。
+		if (wireProjectile_) {
+			// プレイヤーからの距離チェック（最大射程）
+			float distFromPlayer = math.Length(wireProjectile_->GetPosition() - worldTransformPlayer_.translation_);
+			if (distFromPlayer > wireMaxDistance_) {
+				// 射程オーバー: ワイヤーをキャンセルして弾を削除
+				for (auto* b : wireBullets_) {
+					// 所有は bullets_ にあるため、ここでは削除フラグを立てるだけにする
+					if (b)
+						b->Kill();
+				}
+				wireBullets_.clear();
+				wireProjectile_ = nullptr;
+				wireMode_ = WireMode::None;
 
-		// ワイヤー先端を伸ばす
-		wireTipPos_ += wireDir_ * wireSpeed_;
+			} else if (wireProjectile_->IsHooked()) {
 
-		// プレイヤーからの距離が最大射程を超えたら終了
-		float dist = math.Length(wireTipPos_ - worldTransformPlayer_.translation_);
-		if (dist > wireMaxDistance_) {
+				// フック弾がブロックに刺さった -> 引っ張りに移行
+				wireHitPos_ = wireProjectile_->GetPosition();
+				wireMode_ = WireMode::Pulling;
+
+				// 慣性を一旦止める
+				velocity_ = {0, 0, 0};
+
+				// ワイヤーの可視化：プレイヤーから hook まで等間隔で弾モデルを配置する
+				// 既に bullets_ に wireProjectile_ が入っている想定なので、
+				// 以前の中間セグメントがあれば削除してから新規作成する
+				// まず既存のセグメント（hook 以外）を削除（ここでは削除フラグのみ）
+				for (auto* b : wireBullets_) {
+					if (b != wireProjectile_) {
+						if (b)
+							b->Kill();
+					}
+				}
+				wireBullets_.clear();
+
+				Vector3 start = worldTransformPlayer_.translation_;
+				Vector3 end = wireHitPos_;
+				Vector3 to = end - start;
+				float totalDist = math.Length(to);
+				if (totalDist > 0.001f) {
+					Vector3 dirSeg = math.Normalize(to);
+					// セグメント数は start から end まで kWireSegmentSpacing 毎
+					int segCount = static_cast<int>(std::floor(totalDist / kWireSegmentSpacing));
+					// segCount が 0 の場合は hook のみ
+					// 我々は配列を「プレイヤー寄り → フック」の順に保持する
+					for (int i = 1; i < segCount; ++i) {
+						Vector3 segPos = start + dirSeg * (i * kWireSegmentSpacing);
+						auto* segBullet = new Bullet();
+						// 移動しないので direction はゼロ
+						segBullet->Initialize(bulletModel_, camera_, segPos, Vector3{0.0f, 0.0f, 0.0f});
+						segBullet->SetMapChipField(mapChipField_);
+						segBullet->SetPersistent(true);
+						segBullet->SetPosition(segPos);
+						// 管理リストへ（先に push すると順序はプレイヤー側から並ぶ）
+						bullets_.push_back(segBullet);
+						wireBullets_.push_back(segBullet);
+					}
+				}
+				// 最後に hook を配列末尾に置く（wireBullets_ の最後が hook）
+				wireBullets_.push_back(wireProjectile_);
+
+				// アキュムレータをリセット
+				wirePullAccumulatedDistance_ = 0.0f;
+			}
+
+		} else {
+			// 予期せぬケース: 射出弾が nullptr になっている -> キャンセル
 			wireMode_ = WireMode::None;
-			return;
-		}
-
-		// マップ衝突チェック
-		IndexSet idx = mapChipField_->GetMapChipIndexSetByPosition(wireTipPos_);
-		MapChipType type = mapChipField_->GetMapChipTypeByIndex(idx.xIndex, idx.yIndex);
-
-		// ブロックに当たったら刺さる
-		if (type == MapChipType::kBlock) {
-
-			wireHitPos_ = wireTipPos_; // 刺さり位置を保存
-			wireMode_ = WireMode::Pulling;
-
-			// 慣性を一旦止める ↑飛ぶと変になるため
-			velocity_ = {0, 0, 0};
 		}
 
 	} else if (wireMode_ == WireMode::Pulling) {
@@ -321,6 +360,17 @@ void Player::Update() {
 		if (dist < pullReleaseDistance) {
 			// 目的地に到達したので解除
 			wireMode_ = WireMode::None;
+
+			// ワイヤーが終わったのでワイヤー用の弾を消す（プレイヤー移動終了時に消す要件）
+			for (auto* b : wireBullets_) {
+				// hook は bullets_ にも入っているためまとめて削除フラグを立てる
+				if (b)
+					b->Kill();
+			}
+
+			wireBullets_.clear();
+			wireProjectile_ = nullptr;
+
 		} else {
 			// 正規化（距離が非常に小さい場合はゼロベクトルを使う）
 			Vector3 dir = (dist > 1e-6f) ? math.Normalize(toHook) : Vector3{0.0f, 0.0f, 0.0f};
@@ -337,7 +387,6 @@ void Player::Update() {
 
 			// 衝突によって移動できない・接触した場合の処理
 			if (pullInfo.hitWall || pullInfo.landing || pullInfo.ceilingCollision) {
-
 				// ワイヤー移動を解除
 				wireMode_ = WireMode::None;
 
@@ -354,12 +403,45 @@ void Player::Update() {
 				// onGround_ は false のままにする（空中扱い）
 				onGround_ = false;
 
+				// 引っ張り中に衝突で解除された場合もワイヤー用の弾を消す（削除フラグのみ）
+				for (auto* b : wireBullets_) {
+					if (b) {
+						// hook は残す or 既に persistent なら Kill() で統一
+						b->Kill();
+					}
+				}
+
+				wireBullets_.clear();
+				wireProjectile_ = nullptr;
+
 			} else {
+
 				// 移動量を適用（衝突処理で調整済み）
 				worldTransformPlayer_.translation_ += pullInfo.velocity;
 
 				// 物理速度としても保存（次フレームの衝突処理などに利用）
 				velocity_ = pullInfo.velocity;
+
+				// 累積距離を増やし、規定間隔ごとにプレイヤー側のセグメントを削除
+				float moved = math.Length(pullInfo.velocity);
+				wirePullAccumulatedDistance_ += moved;
+
+				while (wirePullAccumulatedDistance_ >= kWireSegmentSpacing && wireBullets_.size() > 1) {
+					// wireBullets_ の先頭はプレイヤー寄りのセグメント、末尾が hook として作成している
+					Bullet* removeSeg = wireBullets_.front();
+					// 念のため hook は残す（末尾）
+					if (removeSeg == wireProjectile_) {
+						// もし先頭が hook だったら終了
+						break;
+					}
+					// リストから即座に取り除かず、削除フラグを立てる
+					if (removeSeg)
+						removeSeg->Kill();
+					// vector の先頭を消す
+					wireBullets_.erase(wireBullets_.begin());
+					wirePullAccumulatedDistance_ -= kWireSegmentSpacing;
+					// 続けて削除するループ
+				}
 
 				// 接地・壁の状態を更新
 				UpdateOnGround(pullInfo);
@@ -368,7 +450,14 @@ void Player::Update() {
 		}
 	}
 
-
+	// 死んだ弾の削除（Update の最後にまとめて行う）
+	bullets_.remove_if([](Bullet* bullet) {
+		if (bullet->IsDead()) {
+			delete bullet;
+			return true;
+		}
+		return false;
+	});
 
 	// 行列の変換と転送
 	math.worldTransformUpdate(worldTransformPlayer_);
@@ -540,12 +629,46 @@ void Player::move() {
 			spinTimer_ = kSpinDuration;
 		}
 
+		// 空中での左右「簡易制御」を追加（ワイヤー衝突後も左右移動できるようにする）
+		if (Input::GetInstance()->PushKey(DIK_D) || Input::GetInstance()->PushKey(DIK_A)) {
+			if (Input::GetInstance()->PushKey(DIK_D)) {
+				// 反対向きの減速（ブレーキ）
+				if (velocity_.x < 0.0f)
+					velocity_.x *= (1.0f - kAttenuation);
+				// 空中加速（地上より小さめ）
+				velocity_.x += kAirAcceleration;
+
+				// 向きの更新（見た目の回転用）
+				if (lrDirection_ != LRDirection::kRight) {
+					lrDirection_ = LRDirection::kRight;
+					turnFirstRotationY_ = worldTransformPlayer_.rotation_.y;
+					turnTimer = ktimeTurn;
+				}
+			} else if (Input::GetInstance()->PushKey(DIK_A)) {
+				if (velocity_.x > 0.0f)
+					velocity_.x *= (1.0f - kAttenuation);
+				velocity_.x -= kAirAcceleration;
+
+				if (lrDirection_ != LRDirection::kLeft) {
+					lrDirection_ = LRDirection::kLeft;
+					turnFirstRotationY_ = worldTransformPlayer_.rotation_.y;
+					turnTimer = ktimeTurn;
+				}
+			}
+
+			// 水平速度上限
+			velocity_.x = std::clamp(velocity_.x, -kLimitRunSpeed, kLimitRunSpeed);
+		} else {
+			// 空中慣性で徐々に減衰
+			velocity_.x *= (1.0f - kAirAttenuation);
+		}
+
 		// 落下速度
 		velocity_ = math.Add(velocity_, Vector3(0, -kGravityAcceleration * (1.0f / 60.0f), 0));
 
-		// ======== 壁スライド処理追加 ========
-
-		if (canWallKick_ && !onGround_) {
+		// ======== 壁スライド処理追加（ワイヤー衝突由来の接触ではスライドしない） ========
+		// 変更: canWallKick_ を満たしていても、wallTouchFromWire_ のときは壁スライドを適用しない
+		if (canWallKick_ && !onGround_ && !wallTouchFromWire_) {
 			// 壁に触れていて落下中ならスライド
 			if (velocity_.y < 0.0f) {
 				// 落下速度を抑える
@@ -908,10 +1031,17 @@ void Player::UpdateOnWall(const CollisionMapInfo& info) {
 void Player::ShootWire(const Vector3& dir) {
 	wireMode_ = WireMode::Shot;
 
-	// ワイヤーの初期位置はプレイヤー位置
-	wireTipPos_ = worldTransformPlayer_.translation_;
-
 	// 方向ベクトル（正規化）
 	Vector3 nd = math.Normalize(dir);
 	wireDir_ = nd; // 保存
+
+	// 弾の生成（フック弾）
+	auto* newBullet = new Bullet();
+	newBullet->Initialize(bulletModel_, camera_, worldTransformPlayer_.translation_, nd);
+	newBullet->SetMapChipField(mapChipField_);
+	newBullet->SetPersistent(true); // ブロックに刺さったら残す
+	// 保持しておく
+	bullets_.push_back(newBullet);
+	wireBullets_.push_back(newBullet);
+	wireProjectile_ = newBullet;
 }

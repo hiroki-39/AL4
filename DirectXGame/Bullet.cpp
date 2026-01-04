@@ -35,10 +35,11 @@ void Bullet::Update() {
 	worldTransformBullet_.translation_ += velocity_;
 
 	// 寿命減少
-	lifeTime_ -= 1.0f / 60.0f;
-	
-	if (lifeTime_ <= 0.0f) {
-		isDead_ = true;
+	if (!persistent_) {
+		lifeTime_ -= 1.0f / 60.0f;
+		if (lifeTime_ <= 0.0f) {
+			isDead_ = true;
+		}
 	}
 
 	// マップ壁に当たったら消滅
@@ -49,10 +50,16 @@ void Bullet::Update() {
 		auto type = mapChipField_->GetMapChipTypeByIndex(index.xIndex, index.yIndex);
 
 		if (type == MapChipType::kBlock) {
-			isDead_ = true;
+			if (persistent_) {
+				// ワイヤー弾：ブロックに刺さって停止する（以後描画は残す）
+				velocity_ = {0.0f, 0.0f, 0.0f};
+				hooked_ = true;
+			} else {
+				// 通常弾は消える
+				isDead_ = true;
+			}
 		}
 	}
-
 
 	// 行列の変換と転送
 	worldTransformUpdate(worldTransformBullet_);
@@ -61,7 +68,7 @@ void Bullet::Update() {
 void Bullet::Draw() {
 
 	// モデルの描画
-	if (isShot_) {
+	if (isShot_ && !isDead_) {
 
 		modelBullet_->Draw(worldTransformBullet_, *camera_);
 	}

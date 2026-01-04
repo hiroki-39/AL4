@@ -2,6 +2,7 @@
 #include "Bullet.h"
 #include "MapChipField.h"
 #include "Math.h"
+#include <vector>
 
 enum class LRDirection {
 	kRight,
@@ -126,7 +127,6 @@ public:
 	const std::list<Bullet*>& GetBullets() const { return bullets_; }
 
 private:
-
 	/*---  ---*/
 	uint32_t arrowHandle;
 
@@ -187,6 +187,12 @@ private:
 	static inline const float kSpinDuration = 0.3f;
 
 	bool spinning_ = false;
+
+	/*--- 空中制御パラメータ（追加） ---*/
+	// 空中での横移動加速（地上より弱め）
+	static inline const float kAirAcceleration = 0.03f;
+	// 空中での横速度減衰（慣性）
+	static inline const float kAirAttenuation = 0.05f;
 
 	/*-------------- プレイヤーの描画に関わる系 --------------*/
 
@@ -255,6 +261,15 @@ private:
 
 	// プル（引っ張り）速度
 	float wirePullSpeed_ = 0.4f;
+	// ワイヤー用に作成した弾（フック＋等間隔で並べた弾）の管理
+	std::vector<Bullet*> wireBullets_;
+	// ワイヤー射出用の弾（飛翔するフック弾）へのポインタ（nullptr なら未発射）
+	Bullet* wireProjectile_ = nullptr;
+	// ワイヤーを構成する等間隔の間隔（大きめに）
+	static inline const float kWireSegmentSpacing = 0.9f;
+	// 引っ張り時に移動した距離を累積してセグメントを削除するためのアキュムレータ
+	float wirePullAccumulatedDistance_ = 0.0f;
+
 	/*-------------- プレイヤーの当たり判定に関わる系 --------------*/
 
 	// マップチップによるフィールド

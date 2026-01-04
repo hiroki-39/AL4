@@ -3,17 +3,35 @@
 #include <fstream>
 #include <map>
 #include <sstream>
+#include <cctype>
 
 using namespace KamataEngine;
 
 namespace {
 
+// マップチップ用トークンテーブル
 std::map<std::string, MapChipType> mapChipTable = {
     {"0", MapChipType::kBlank},
     {"1", MapChipType::kBlock},
 };
 
+// 敵トークンテーブル（CSV内で敵を表すトークンをここに追加）
+std::map<std::string, EnemyType> enemyTable = {
+    {"E1", EnemyType::kSlime},
+    {"E2", EnemyType::kBat},
+};
+
+// 末尾の改行やスペース、CR を取り除く簡易トリム
+inline void TrimToken(std::string& s) {
+    // remove trailing whitespace
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.pop_back();
+    // remove leading whitespace
+    size_t i = 0;
+    while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) ++i;
+    if (i) s.erase(0, i);
 }
+
+} // namespace
 
 void MapChipField::ResetMapChipData() {
 
@@ -22,9 +40,11 @@ void MapChipField::ResetMapChipData() {
 	mapChipData_.Data.resize(kNumBlockVirtical);
 
 	for (std::vector<MapChipType>& mapChipDataLine : mapChipData_.Data) {
-
 		mapChipDataLine.resize(kNumBlockHorizontal);
 	}
+
+	// 敵データをリセット
+	enemySpawns_.clear();
 }
 
 void MapChipField::LoadMapChipCsv(const std::string& filePath) {
@@ -48,7 +68,10 @@ void MapChipField::LoadMapChipCsv(const std::string& filePath) {
 	// CSVからマップチップデータを読み込む
 	for (uint32_t y = 0; y < kNumBlockVirtical; ++y) {
 		std::string line;
-		std::getline(mapChipCsv, line);
+		if (!std::getline(mapChipCsv, line)) {
+			// 行が足りない場合は残り放置（既に kBlank 等で初期化されている）
+			break;
+		}
 
 		// 1行分の文字列をストリームに変換
 		std::stringstream line_Stream(line);
@@ -56,11 +79,29 @@ void MapChipField::LoadMapChipCsv(const std::string& filePath) {
 		for (int32_t x = 0; x < kNumBlockHorizontal; ++x) {
 
 			std::string word;
-			getline(line_Stream, word, ',');
+			if (!std::getline(line_Stream, word, ',')) {
+				// 列が足りない場合は続行
+				break;
+			}
 
-			if (mapChipTable.contains(word)) {
+			TrimToken(word);
+
+			// マップチップトークンなら設定
+			if (!word.empty() && mapChipTable.contains(word)) {
 				mapChipData_.Data[y][x] = mapChipTable[word];
 			}
+			// マップチップではなく敵トークンなら敵情報を登録し、マップは空白にする
+			else if (!word.empty() && enemyTable.contains(word)) {
+				EnemySpawn spawn;
+				spawn.type = enemyTable[word];
+				spawn.index.xIndex = static_cast<uint32_t>(x);
+				spawn.index.yIndex = static_cast<uint32_t>(y);
+				enemySpawns_.push_back(spawn);
+
+				// 敵のあるセルはマップ上は空白扱い（必要なら他の扱いに変更）
+				mapChipData_.Data[y][x] = MapChipType::kBlank;
+			}
+			// それ以外は既定値（初期化済み）
 		}
 	}
 }

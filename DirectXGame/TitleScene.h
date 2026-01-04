@@ -77,6 +77,24 @@ private:
 	// スカイドームのモデル
 	KamataEngine::Model* modelSkydome_ = nullptr;
 
+	/*-------------- スプライト用アニメーション変数 --------------*/
+
+	// タイトルスプライトの基準位置（スクリーン座標）
+	KamataEngine::Vector2 titleSpriteBasePos_ = {300.0f, 100.0f};
+	// タイトル上下アニメーションの振幅（ピクセル）
+	float titleSpriteAmplitude_ = 8.0f;
+	// タイトル上下アニメーション周期（秒）
+	float titleSpritePeriod_ = 2.0f;
+	// タイトルアニメーション用カウンタ
+	float titleSpriteCounter_ = 0.0f;
+
+	// ボタン点滅（アルファ変化）周期（秒）
+	float buttonBlinkPeriod_ = 1.0f;
+	// ボタン点滅用カウンタ
+	float buttonBlinkCounter_ = 0.0f;
+	// ボタンのベースカラー（RGB）
+	KamataEngine::Vector4 buttonBaseColor_ = {1.0f, 1.0f, 1.0f, 1.0f};
+
 	/*-------------- 関数 --------------*/
 
 	Math math;

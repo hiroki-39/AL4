@@ -12,7 +12,7 @@ public:
 	/// <param name="camera">カメラ</param>
 	/// <param name="position">位置</param>
 	void Initialize(KamataEngine::Model* model, KamataEngine::Camera* camera, const KamataEngine::Vector3& position, const KamataEngine::Vector3& direction);
-	
+
 	/// <summary>
 	/// 更新処理
 	/// </summary>
@@ -41,6 +41,15 @@ public:
 
 	void Kill() { isDead_ = true; }
 
+	// 直接位置を設定
+	void SetPosition(const KamataEngine::Vector3& pos) { worldTransformBullet_.translation_ = pos; }
+
+	// ワイヤー用途でヒット後に残す
+	void SetPersistent(bool p) { persistent_ = p; }
+
+	// 当たり（ブロックに刺さった）フラグ
+	bool IsHooked() const { return hooked_; }
+
 private:
 	// 弾のワールドトランスフォーム
 	KamataEngine::WorldTransform worldTransformBullet_;
@@ -68,6 +77,12 @@ private:
 
 	// マップチップによるフィールド
 	MapChipField* mapChipField_ = nullptr;
+
+	//　ワイヤー用に当たり後に残すかどうか
+	bool persistent_ = false;
+
+	//　ブロックに刺さった（停止）したかどうか
+	bool hooked_ = false;
 
 	/*--- 関数 ---*/
 	Math math;

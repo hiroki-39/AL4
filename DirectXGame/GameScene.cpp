@@ -40,17 +40,23 @@ void GameScene::Initialize() {
 	// 3Dモデルの生成
 	modelEnemy_ = Model::CreateFromOBJ("enemy", true);
 
-	// 敵の生成
-	for (int i = 0; i < 2; i++) {
-		Enemy* newEnemy = new Enemy();
+	// 敵の生成（CSVのスポーン情報を使用）
+	if (mapchipField_) {
+		const auto& spawns = mapchipField_->GetEnemySpawns();
+		for (const auto& spawn : spawns) {
+			Enemy* newEnemy = new Enemy();
 
-		// 座標をマップチップ番号で取得
-		Vector3 enemyPosition = mapchipField_->GetMapChipPositionByIndex(30 + i * 2, 18);
+			// マップチップ座標をワールド座標に変換して初期位置とする
+			Vector3 enemyPosition = mapchipField_->GetMapChipPositionByIndex(spawn.index.xIndex, spawn.index.yIndex);
 
-		// プレイヤーの初期化
-		newEnemy->Initialize(modelEnemy_, &camera_, enemyPosition);
+			// 敵の初期化
+			newEnemy->Initialize(modelEnemy_, &camera_, enemyPosition);
 
-		enemies_.push_back(newEnemy);
+			// 将来的に spawn.type に応じた初期設定を行う場合はここで switch する
+			// switch (spawn.type) { ... }
+
+			enemies_.push_back(newEnemy);
+		}
 	}
 
 #pragma endregion
@@ -149,6 +155,32 @@ void GameScene::Initialize() {
 
 	reloadSprite = Sprite::Create(reloadTexHandle, {0.0f, 0.0f});
 	reloadSprite->SetSize({40.0f, 40.0f});
+
+	operationTexHandle = TextureManager::Load("font/manual.png");
+	operationSprite = Sprite::Create(operationTexHandle, {760.0f, 620.0f});
+	operationSprite->SetSize({500.0f, 100.0f});
+
+	targetTexHandle = TextureManager::Load("font/target.png");
+	targetSprite = Sprite::Create(targetTexHandle, {400.0f, 20.0f});
+	targetSprite->SetSize({125.0f, 50.0f});
+
+	enemyCountTexHandle[0] = TextureManager::Load("UI/Numbers/0.png");
+	enemyCountTexHandle[1] = TextureManager::Load("UI/Numbers/1.png");
+	enemyCountTexHandle[2] = TextureManager::Load("UI/Numbers/2.png");
+	enemyCountTexHandle[3] = TextureManager::Load("UI/Numbers/3.png");
+	enemyCountTexHandle[4] = TextureManager::Load("UI/Numbers/4.png");
+	enemyCountTexHandle[5] = TextureManager::Load("UI/Numbers/5.png");
+	enemyCountTexHandle[6] = TextureManager::Load("UI/Numbers/6.png");
+	enemyCountTexHandle[7] = TextureManager::Load("UI/Numbers/7.png");
+	enemyCountTexHandle[8] = TextureManager::Load("UI/Numbers/8.png");
+	enemyCountTexHandle[9] = TextureManager::Load("UI/Numbers/9.png");
+
+	// --- 追加: 敵数表示用スプライトを生成 ---
+	for (int i = 0; i < 10; i++) {
+		enemyCountSprite[i] = Sprite::Create(enemyCountTexHandle[i], {0.0f, 0.0f});
+		// 画面右上に表示する想定なのでやや小さめに
+		enemyCountSprite[i]->SetSize({36.0f, 36.0f});
+	}
 
 #pragma endregion
 
@@ -328,7 +360,7 @@ void GameScene::Draw() {
 
 	// スカイドームの描画
 	skydome_->Draw();
-	
+
 	// 3Dモデルの後処理
 	Model::PostDraw();
 
@@ -413,6 +445,40 @@ void GameScene::Draw() {
 		maxNumberSprite[maxOnes]->Draw();
 	}
 
+	// 操作方法UIの描画
+	operationSprite->Draw();
+
+	// 目標UIの描画
+	targetSprite->Draw();
+
+	// --- 追加: 敵数表示 (右上) ---
+	{
+		int alive = 0;
+		for (Enemy* e : enemies_) {
+			if (e && !e->IsDead()) {
+				++alive;
+			}
+		}
+
+		// 右上配置
+		Vector2 enemyBasePos = {540.0f, 25.0f};
+		float enemySpacing = 40.0f;
+
+		// 現在 (生存数)
+		int aliveTens = alive / 10;
+		int aliveOnes = alive % 10;
+
+		if (alive >= 10) {
+			enemyCountSprite[aliveTens]->SetPosition(enemyBasePos);
+			enemyCountSprite[aliveTens]->Draw();
+			enemyCountSprite[aliveOnes]->SetPosition({enemyBasePos.x + enemySpacing, enemyBasePos.y});
+			enemyCountSprite[aliveOnes]->Draw();
+		} else {
+			enemyCountSprite[aliveOnes]->SetPosition(enemyBasePos);
+			enemyCountSprite[aliveOnes]->Draw();
+		}
+	}
+
 	Sprite::PostDraw();
 }
 
@@ -421,6 +487,8 @@ GameScene::~GameScene() {
 
 	// カメラの解放
 	delete debugCamera_;
+	// カメラコントローラーの解放（Initialize で new している）
+	delete cameraController_;
 
 	// プレイヤーの解放
 	delete player_;
@@ -429,7 +497,6 @@ GameScene::~GameScene() {
 	// ブロックの解放
 	for (std::vector<WorldTransform*>& worldTransBlockLine : worldTransformBlocks_) {
 		for (WorldTransform* worldTransformBlock : worldTransBlockLine) {
-
 			delete worldTransformBlock;
 		}
 	}
@@ -439,18 +506,35 @@ GameScene::~GameScene() {
 
 	// スカイドームの解放
 	delete skydome_;
-
 	delete modelSkydome_;
 
 	// 敵の解放
 	for (Enemy* enemy : enemies_) {
 		delete enemy;
 	}
+	// 敵モデルの解放（CreateFromOBJ で取得しているため解放する）
+	delete modelEnemy_;
+
+	// フェードの解放（new しているため解放する）
+	delete fade_;
 
 	// マップチップフィールドの解放
 	delete mapchipField_;
+
 	for (uint32_t i = 0; i < 10; i++) {
 		delete numberSprite[i];
+	}
+
+	for (uint32_t i = 0; i < 10; i++) {
+		delete maxNumberSprite[i];
+	}
+	delete slashSprite;
+	delete reloadSprite;
+	delete operationSprite;
+
+	// --- 追加: 敵数スプライトの解放 ---
+	for (uint32_t i = 0; i < 10; i++) {
+		delete enemyCountSprite[i];
 	}
 }
 

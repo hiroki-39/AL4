@@ -1,4 +1,3 @@
-
 #pragma once
 #include "Math.h"
 #include "KamataEngine.h"
@@ -9,15 +8,28 @@ enum class MapChipType {
 	kBlock, // ブロック
 };
 
+// 敵タイプ
+enum class EnemyType {
+	kNone,
+	kSlime,
+	kBat,
+	// 必要ならここに追加
+};
+
 // マップチップの構造体
 struct MapChipData {
-
 	std::vector<std::vector<MapChipType>> Data;
 };
 
 struct IndexSet {
 	uint32_t xIndex;
 	uint32_t yIndex;
+};
+
+// 敵スポーン情報
+struct EnemySpawn {
+	EnemyType type;
+	IndexSet index;
 };
 
 // 範囲矩形
@@ -61,13 +73,21 @@ public:
 
 	RangeRect GetRectIndex(uint32_t xIndex, uint32_t yIndex);
 
+	// 読み込んだ敵の一覧を取得
+	const std::vector<EnemySpawn>& GetEnemySpawns() const { return enemySpawns_; }
+
 	// アクセッサー
 	uint32_t GetNumBlockVirtical() { return kNumBlockVirtical; };
 	uint32_t GetNumBlockHorizontal() { return kNumBlockHorizontal; };
+	float GetBlockWidth() { return kBlockWidth; };
+	float GetBlockHeight() { return kBlockHeight; };
 
 private:
 	// マップチップのデータ
 	MapChipData mapChipData_;
+
+	// 読み込んだ敵スポーン情報
+	std::vector<EnemySpawn> enemySpawns_;
 
 	// 1ブロックのサイズ
 	static inline const float kBlockWidth = 2.0f;
