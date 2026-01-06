@@ -1,6 +1,6 @@
 #include "TitleScene.h"
-#include <numbers>
 #include <algorithm>
+#include <numbers>
 
 using namespace KamataEngine;
 
@@ -25,7 +25,6 @@ void TitleScene::Initialize() {
 
 	// スプライトを作成し、基準位置は titleSpriteBasePos_ に合わせる
 	titleSprite_ = Sprite::Create(titleHandle_, {titleSpriteBasePos_.x, titleSpriteBasePos_.y});
-	
 
 	// スタートボタンの読み込み
 	buttonHandle_ = TextureManager::Load("font/start.png");
@@ -60,6 +59,12 @@ void TitleScene::Initialize() {
 	fade_ = new Fade();
 	fade_->Initialize();
 	fade_->Start(Fade::Status::FadeIn, 1.0f);
+
+	// BGMの読み込み
+	soundHandle_ = Audio::GetInstance()->LoadWave("sounds/BGM_title.wav");
+
+	// BGM再生
+	bgmHandle_ = Audio::GetInstance()->PlayWave(soundHandle_, true);
 }
 
 void TitleScene::Update() {
@@ -84,6 +89,9 @@ void TitleScene::Update() {
 
 			buttonBlinkPeriod_ = 0.15f;
 			buttonBlinkCounter_ = 0.0f;
+
+			// BGM停止
+			Audio::GetInstance()->StopWave(bgmHandle_);
 
 			phase_ = Phase::kFadeOut;
 			fade_->Start(Fade::Status::FadeOut, 1.0f);

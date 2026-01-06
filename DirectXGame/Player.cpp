@@ -27,7 +27,7 @@ void Player::Initialize(Model* model, Camera* camera, const Vector3& position) {
 	arrowSprite->SetAnchorPoint({0.5f, 0.5f});
 
 	// 弾モデルの生成
-	bulletModel_ = Model::CreateFromOBJ("Player", true);
+	bulletModel_ = Model::CreateFromOBJ("Block", true);
 
 	// ワールド変換の初期化
 	worldTransformPlayer_.Initialize();
@@ -37,6 +37,9 @@ void Player::Initialize(Model* model, Camera* camera, const Vector3& position) {
 
 	// 回転
 	worldTransformPlayer_.rotation_.y = std::numbers::pi_v<float> / 2.0f;
+
+	// wireProjectileSpeed_ を既存の wireSpeed_ で初期化（互換性）
+	wireProjectileSpeed_ = wireSpeed_;
 }
 
 void Player::Update() {
@@ -74,6 +77,16 @@ void Player::Update() {
 			wireAngle_ -= wireAngleSpeed_;
 			if (wireAngle_ <= 0.0f) {
 				wireAngleUp_ = true;
+			}
+		}
+
+		// 狙いの上下選択（ワイヤーモードかつ発射前のみ）
+		// w: 上向き、s: 下向き（TriggerKey を使って押した瞬間に切り替え）
+		if (wireMode_ == WireMode::None) {
+			if (Input::GetInstance()->TriggerKey(DIK_W)) {
+				wireAimDown_ = false;
+			} else if (Input::GetInstance()->TriggerKey(DIK_S)) {
+				wireAimDown_ = true;
 			}
 		}
 	}
@@ -128,8 +141,9 @@ void Player::Update() {
 			float dirX = (lrDirection_ == LRDirection::kRight) ? 1.0f : -1.0f;
 
 			// ワイヤー方向ベクトル
-			// Y成分を常に上向き（正）にする
-			Vector3 wireDir = {dirX * cosf(rad), fabsf(sinf(rad)), 0.0f};
+			// Y 成分の符号は wireAimDown_ で選択（上向きなら正、下向きなら負）
+			float vy = (wireAimDown_) ? -fabsf(sinf(rad)) : fabsf(sinf(rad));
+			Vector3 wireDir = {dirX * cosf(rad), vy, 0.0f};
 
 			ShootWire(wireDir); // ワイヤー射出処理
 		}
@@ -186,6 +200,15 @@ void Player::Update() {
 		}
 	}
 
+	// Glide タイマー更新（滑空が有効な場合は時間経過で解除）
+	if (gliding_) {
+		glideTimer_ -= 1.0f / 60.0f;
+		if (glideTimer_ <= 0.0f) {
+			gliding_ = false;
+			glideTimer_ = 0.0f;
+		}
+	}
+
 	// 壁キック入力処理
 	// 変更点: 通常のマップ当たり判定に加え、ワイヤーで当たった直後でも壁ジャンプ可能にする
 	if (!onGround_ && (collisionMapInfo.hitWall || wallTouchFromWire_) && Input::GetInstance()->PushKey(DIK_SPACE) && canWallKick_ && wallKickCooldown_ <= 0.0f) {
@@ -204,6 +227,10 @@ void Player::Update() {
 		// ワイヤー直当たりフラグは消しておく
 		wallTouchFromWire_ = false;
 		wallTouchFromWireTimer_ = 0.0f;
+
+		// ジャンプで滑空を解除
+		gliding_ = false;
+		glideTimer_ = 0.0f;
 	}
 
 	// 3.移動
@@ -238,7 +265,7 @@ void Player::Update() {
 		float destinationRotationYTable[] = {std::numbers::pi_v<float> / 2.0f, std::numbers::pi_v<float> * 3.0f / 2.0f};
 
 		// 状態に応じた角度を取得
-		float destinationRotationY = destinationRotationYTable[static_cast<uint32_t>(lrDirection_)];
+		float destinationRotationY = destinationRotationYTable[static_cast<uint32_t>(lrDirection_)] ;
 
 		// 自キャラの角度を設定
 		worldTransformPlayer_.rotation_.y = math.EaseInOut(t, turnFirstRotationY_, destinationRotationY);
@@ -291,6 +318,13 @@ void Player::Update() {
 				}
 				wireBullets_.clear();
 				wireProjectile_ = nullptr;
+
+				// 空中でワイヤーが外れたら滑空開始
+				if (!onGround_) {
+					gliding_ = true;
+					glideTimer_ = kGlideDuration;
+				}
+
 				wireMode_ = WireMode::None;
 
 			} else if (wireProjectile_->IsHooked()) {
@@ -320,15 +354,17 @@ void Player::Update() {
 				float totalDist = math.Length(to);
 				if (totalDist > 0.001f) {
 					Vector3 dirSeg = math.Normalize(to);
-					// セグメント数は start から end まで kWireSegmentSpacing 毎
-					int segCount = static_cast<int>(std::floor(totalDist / kWireSegmentSpacing));
+					// セグメント数は start から end まで wireSegmentSpacing_ 毎
+					int segCount = static_cast<int>(std::floor(totalDist / wireSegmentSpacing_));
 					// segCount が 0 の場合は hook のみ
 					// 我々は配列を「プレイヤー寄り → フック」の順に保持する
 					for (int i = 1; i < segCount; ++i) {
-						Vector3 segPos = start + dirSeg * (i * kWireSegmentSpacing);
+						Vector3 segPos = start + dirSeg * (i * wireSegmentSpacing_);
 						auto* segBullet = new Bullet();
+						// 使用モデルは wireSegmentModel_ が優先（nullptr の場合は通常弾モデル）
+						KamataEngine::Model* segModel = (wireSegmentModel_) ? wireSegmentModel_ : bulletModel_;
 						// 移動しないので direction はゼロ
-						segBullet->Initialize(bulletModel_, camera_, segPos, Vector3{0.0f, 0.0f, 0.0f});
+						segBullet->Initialize(segModel, camera_, segPos, Vector3{0.0f, 0.0f, 0.0f});
 						segBullet->SetMapChipField(mapChipField_);
 						segBullet->SetPersistent(true);
 						segBullet->SetPosition(segPos);
@@ -346,6 +382,11 @@ void Player::Update() {
 
 		} else {
 			// 予期せぬケース: 射出弾が nullptr になっている -> キャンセル
+			// 空中でワイヤーが外れたら滑空開始
+			if (!onGround_) {
+				gliding_ = true;
+				glideTimer_ = kGlideDuration;
+			}
 			wireMode_ = WireMode::None;
 		}
 
@@ -360,6 +401,12 @@ void Player::Update() {
 		if (dist < pullReleaseDistance) {
 			// 目的地に到達したので解除
 			wireMode_ = WireMode::None;
+
+			// 空中でワイヤーが外れたら滑空開始（到達しても空中なら）
+			if (!onGround_) {
+				gliding_ = true;
+				glideTimer_ = kGlideDuration;
+			}
 
 			// ワイヤーが終わったのでワイヤー用の弾を消す（プレイヤー移動終了時に消す要件）
 			for (auto* b : wireBullets_) {
@@ -389,6 +436,12 @@ void Player::Update() {
 			if (pullInfo.hitWall || pullInfo.landing || pullInfo.ceilingCollision) {
 				// ワイヤー移動を解除
 				wireMode_ = WireMode::None;
+
+				// 空中でワイヤーが外れたら滑空開始（接触解除でも空中なら）
+				if (!onGround_) {
+					gliding_ = true;
+					glideTimer_ = kGlideDuration;
+				}
 
 				// 衝突時は慣性を止める（安全のため）
 				velocity_ = {0.0f, 0.0f, 0.0f};
@@ -426,7 +479,7 @@ void Player::Update() {
 				float moved = math.Length(pullInfo.velocity);
 				wirePullAccumulatedDistance_ += moved;
 
-				while (wirePullAccumulatedDistance_ >= kWireSegmentSpacing && wireBullets_.size() > 1) {
+				while (wirePullAccumulatedDistance_ >= wireSegmentSpacing_ && wireBullets_.size() > 1) {
 					// wireBullets_ の先頭はプレイヤー寄りのセグメント、末尾が hook として作成している
 					Bullet* removeSeg = wireBullets_.front();
 					// 念のため hook は残す（末尾）
@@ -439,7 +492,7 @@ void Player::Update() {
 						removeSeg->Kill();
 					// vector の先頭を消す
 					wireBullets_.erase(wireBullets_.begin());
-					wirePullAccumulatedDistance_ -= kWireSegmentSpacing;
+					wirePullAccumulatedDistance_ -= wireSegmentSpacing_;
 					// 続けて削除するループ
 				}
 
@@ -476,9 +529,9 @@ void Player::Draw() {
 	// ---- ワイヤー狙い用の矢印表示 ----
 	// ワイヤーモードで、まだワイヤーを射出していない（狙い中）の場合に表示
 	if (fireMode_ == FireMode::Wire && wireMode_ == WireMode::None) {
-		// 矢印をプレイヤー上に表示するためのワールド位置（プレイヤーの頭上）
+		// 矢印をプレイヤーの中心に表示する（変更点）
 		Vector3 worldPos = worldTransformPlayer_.translation_;
-		worldPos.y += (kHeight / 2.0f + 0.5f); // 上方オフセット（必要に応じて調整）
+		// （以前は頭上にオフセットしていた: worldPos.y += (kHeight / 2.0f + 0.5f);）
 
 		// world -> view -> proj の順で変換し、NDC を得る
 		Vector3 viewPos = math.Transform(worldPos, camera_->matView);
@@ -494,12 +547,12 @@ void Player::Draw() {
 		arrowSprite->SetPosition({screenX, screenY});
 
 		// 回転：ワイヤー実際の発射ベクトル（Draw時点の狙い方向）から角度を算出して適用
-		// 実際の射出時と同じ計算を使う（Yは上向きに固定）
+		// 実際の射出時と同じ計算を使う（Yは上向きに固定 / 下向き指定があれば負にする）
 		float rad = wireAngle_ * (3.14159f / 180.0f);
 		float dirX = (lrDirection_ == LRDirection::kRight) ? 1.0f : -1.0f;
 		// 目標方向ベクトル（ShootWire と同じ）
 		float vx = dirX * cosf(rad);
-		float vy = fabsf(sinf(rad)); // 常に上向きにする
+		float vy = (wireAimDown_) ? -fabsf(sinf(rad)) : fabsf(sinf(rad));
 		// atan2f( y, x ) で角度を取得（+x を基準に反時計回り）
 		float angleRad = atan2f(vy, vx);
 
@@ -512,19 +565,6 @@ void Player::Draw() {
 		arrowSprite->Draw();
 		Sprite::PostDraw();
 	}
-
-	// ---- デバッグ情報の表示 ----
-
-	/*ImGui::Begin("window");
-
-	ImGui::Text("Bullets: %d / %d", currentBullets_, maxBullets_);
-
-	if (isReloading_) {
-
-	    ImGui::Text("Reloading...");
-	}
-
-	ImGui::End();*/
 }
 
 void Player::move() {
@@ -609,6 +649,10 @@ void Player::move() {
 
 			// 地上からジャンプした場合は壁キックをリセット（再び壁に接触したら可能）
 			canWallKick_ = false;
+
+			// ジャンプで滑空を解除
+			gliding_ = false;
+			glideTimer_ = 0.0f;
 		}
 
 		// 空中
@@ -627,6 +671,10 @@ void Player::move() {
 			spinning_ = true;
 
 			spinTimer_ = kSpinDuration;
+
+			// 二段ジャンプでは滑空を解除
+			gliding_ = false;
+			glideTimer_ = 0.0f;
 		}
 
 		// 空中での左右「簡易制御」を追加（ワイヤー衝突後も左右移動できるようにする）
@@ -635,7 +683,7 @@ void Player::move() {
 				// 反対向きの減速（ブレーキ）
 				if (velocity_.x < 0.0f)
 					velocity_.x *= (1.0f - kAttenuation);
-				// 空中加速（地上より小さめ）
+				// 空中加速（地上より小さめ） -- 滑空中も操作は同じ（必要ならここで差分付け可）
 				velocity_.x += kAirAcceleration;
 
 				// 向きの更新（見た目の回転用）
@@ -663,8 +711,9 @@ void Player::move() {
 			velocity_.x *= (1.0f - kAirAttenuation);
 		}
 
-		// 落下速度
-		velocity_ = math.Add(velocity_, Vector3(0, -kGravityAcceleration * (1.0f / 60.0f), 0));
+		// 落下速度（滑空中は重力を軽減）
+		float gravityScale = gliding_ ? kGlideGravityScale : 1.0f;
+		velocity_ = math.Add(velocity_, Vector3(0, -kGravityAcceleration * gravityScale * (1.0f / 60.0f), 0));
 
 		// ======== 壁スライド処理追加（ワイヤー衝突由来の接触ではスライドしない） ========
 		// 変更: canWallKick_ を満たしていても、wallTouchFromWire_ のときは壁スライドを適用しない
@@ -1016,6 +1065,10 @@ void Player::UpdateOnGround(const CollisionMapInfo& info) {
 
 			// ジャンプ回数リセット
 			jumpCount_ = 0;
+
+			// 着地で滑空を解除
+			gliding_ = false;
+			glideTimer_ = 0.0f;
 		}
 	}
 }
@@ -1037,11 +1090,46 @@ void Player::ShootWire(const Vector3& dir) {
 
 	// 弾の生成（フック弾）
 	auto* newBullet = new Bullet();
-	newBullet->Initialize(bulletModel_, camera_, worldTransformPlayer_.translation_, nd);
+
+	// 使用するモデルは優先順位: wireProjectileModel_ -> bulletModel_
+	KamataEngine::Model* projModel = (wireProjectileModel_) ? wireProjectileModel_ : bulletModel_;
+
+	newBullet->Initialize(projModel, camera_, worldTransformPlayer_.translation_, nd);
 	newBullet->SetMapChipField(mapChipField_);
 	newBullet->SetPersistent(true); // ブロックに刺さったら残す
+
+	// 発射速度を上書き（Bullet の速度フィールドを直接設定）
+	newBullet->SetVelocity(nd * wireProjectileSpeed_);
+
+	// フックを発射方向に傾ける
+	newBullet->SetRotationFromDirection(nd);
+
+	// フック弾のサイズ（既にあるなら上書きしないでください）
+	newBullet->SetScale(Vector3{0.5f, 0.5f, 0.5f});
+
 	// 保持しておく
 	bullets_.push_back(newBullet);
 	wireBullets_.push_back(newBullet);
 	wireProjectile_ = newBullet;
 }
+
+/* ---------- ワイヤー設定 API の実装 ---------- */
+void Player::SetWireModels(KamataEngine::Model* projectileModel, KamataEngine::Model* segmentModel) {
+	wireProjectileModel_ = projectileModel;
+	wireSegmentModel_ = segmentModel;
+}
+
+void Player::SetWireProjectileSpeed(float speed) {
+	wireProjectileSpeed_ = speed;
+	// 互換のため既存 wireSpeed_ も更新しておく
+	wireSpeed_ = speed;
+}
+
+void Player::SetWireSegmentSpacing(float spacing) {
+	// 安全値チェック
+	if (spacing > 0.01f) {
+		wireSegmentSpacing_ = spacing;
+	}
+}
+
+void Player::SetWirePullSpeed(float speed) { wirePullSpeed_ = speed; }

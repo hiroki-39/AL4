@@ -95,6 +95,13 @@ private:
 	// ボタンのベースカラー（RGB）
 	KamataEngine::Vector4 buttonBaseColor_ = {1.0f, 1.0f, 1.0f, 1.0f};
 
+	/*-------------- BGM関連 --------------*/
+	// サウンドデータハンドル
+	int32_t soundHandle_ = 0;
+
+	// BGM再生ハンドル
+	uint32_t bgmHandle_ = 0;
+
 	/*-------------- 関数 --------------*/
 
 	Math math;

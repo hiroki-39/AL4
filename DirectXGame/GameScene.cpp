@@ -1,3 +1,4 @@
+#define NOMINMAX
 #include "GameScene.h"
 #include <algorithm>
 #include <cmath>
@@ -32,13 +33,20 @@ void GameScene::Initialize() {
 	// マップチップデータのセット
 	player_->SetMapChipField(mapchipField_);
 
+	auto* hookModel = Model::CreateFromOBJ("anchor", true);
+	auto* segmentModel = Model::CreateFromOBJ("chain", true);
+	player_->SetWireModels(hookModel, segmentModel);
+	player_->SetWireProjectileSpeed(1.2f);
+	player_->SetWireSegmentSpacing(0.6f);
+	player_->SetWirePullSpeed(0.5f);
+
 #pragma endregion
 
 #pragma region "敵"
 	/*-------------- 敵の初期化 --------------*/
 
 	// 3Dモデルの生成
-	modelEnemy_ = Model::CreateFromOBJ("enemy", true);
+	modelEnemy_ = Model::CreateFromOBJ("target", true);
 
 	// 敵の生成（CSVのスポーン情報を使用）
 	if (mapchipField_) {
@@ -102,6 +110,11 @@ void GameScene::Initialize() {
 
 	// カメラコントローラーの初期化
 	cameraController_->Initialize(&camera_);
+
+	// ここでマップの範囲を元にカメラの可動範囲を設定する（タイル単位パディング：4）
+	if (mapchipField_) {
+		cameraController_->SetMapField(mapchipField_, 4); // これで「マップ端から4タイル手前」で追従が止まる
+	}
 
 	// 追尾対象を設定
 	cameraController_->SetTarget(player_);
@@ -183,6 +196,12 @@ void GameScene::Initialize() {
 	}
 
 #pragma endregion
+
+	// BGMの読み込み
+	soundHandle_ = Audio::GetInstance()->LoadWave("Sounds/BGM_game.wav");
+
+	// BGM再生
+	bgmHandle_ = Audio::GetInstance()->PlayWave(soundHandle_, true);
 
 	// ゲームの現在フェーズ
 	phase_ = Phase::kFadeIn;
@@ -294,7 +313,7 @@ void GameScene::Update() {
 		// 全ての当たり判定を行う
 		CheckAllCollisions();
 
-		// --- 追加: 全敵が死亡しているかチェック ---
+		// --- 全敵が死亡しているかチェック ---
 		{
 			bool allDead = true;
 			for (Enemy* enemy : enemies_) {
@@ -310,6 +329,8 @@ void GameScene::Update() {
 					fade_->Start(Fade::Status::FadeOut, 1.0f);
 				}
 				phase_ = Phase::kFadeOut;
+				// BGM停止を追加
+				Audio::GetInstance()->StopWave(bgmHandle_);
 			}
 		}
 		break;

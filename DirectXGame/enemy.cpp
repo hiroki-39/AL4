@@ -13,8 +13,7 @@ void Enemy::Initialize(KamataEngine::Model* model, KamataEngine::Camera* camera,
 	camera_ = camera;
 	worldTransformEnemy_.Initialize();
 	worldTransformEnemy_.translation_ = position;
-	// 角度調整
-	worldTransformEnemy_.rotation_.y = std::numbers::pi_v<float> * 3.0f / 2.0f;
+
 
 	// 速度設定
 	velocity_ = {-kWalkSpeed, 0.0f, 0.0f};
@@ -49,7 +48,7 @@ void Enemy::Update() {
 		// タイマーの加算
 		walkTimer += 1.0f / 60.0f;
 
-		worldTransformEnemy_.rotation_.x = std::sin(std::numbers::pi_v<float> * 2.0f * walkTimer / kWalkMotionTime);
+		worldTransformEnemy_.rotation_.y += 0.1f /*std::sin(std::numbers::pi_v<float> * 2.0f * walkTimer / kWalkMotionTime)*/;
 
 		// 行列の変換と転送
 		math.worldTransformUpdate(worldTransformEnemy_);
@@ -62,6 +61,15 @@ void Enemy::Update() {
 
 		worldTransformEnemy_.rotation_.y += 0.3f;
 		worldTransformEnemy_.rotation_.x = math.EaseOut(counter_ / kDefeatedTime, kDefeatedMotionAngleStart, kDefeatedMotionAngleEnd);
+
+		// スケールを徐々に小さくして消す
+		{
+			float t = counter_ / kDefeatedTime;
+			if (t > 1.0f) t = 1.0f;
+			// イージングで自然に縮む
+			float s = math.EaseOut(t, 1.0f, 0.0f);
+			worldTransformEnemy_.scale_ = {s, s, s};
+		}
 
 		// 行列の変換と転送
 		math.worldTransformUpdate(worldTransformEnemy_);

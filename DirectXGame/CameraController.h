@@ -15,6 +15,7 @@ struct Rect {
 };
 
 class Player;
+class MapChipField;
 
 class CameraController {
 public:
@@ -36,12 +37,17 @@ public:
 	// アクセッサ
 	void SetTarget(Player* target) { target_ = target; }
 
-	void SetmovaleArea(Rect& area) { movaleArea_ = area; };
+	// マップ全体の矩形を渡すと、ビューポートに合わせて内側に縮めた可動範囲を設定する
+	void SetmovaleArea(const Rect& area);
+
+	// マップ情報を渡して「タイル単位のパディング」で可動範囲を設定する
+	// paddingTiles: カメラが止まる位置をマップ端から何タイル手前にするか（デフォルト 4）
+	void SetMapField(MapChipField* mapField, int paddingTiles = 4);
 
 private:
 	/*-------------- カメラ --------------*/
 	// カメラ
-	KamataEngine::Camera* camera_;
+	KamataEngine::Camera* camera_ = nullptr;
 
 	// カメラのオフセット
 	KamataEngine::Vector3 targetOffset_ = {0.0f, 0.0f, -20.0f};
@@ -64,7 +70,10 @@ private:
 	/*-------------- プレイヤー --------------*/
 	Player* target_ = nullptr;
 
-	/*-------------- 関数 --------------*/
+	/*-------------- マップ情報（SetMapField で設定） --------------*/
+	MapChipField* mapField_ = nullptr;
+	int paddingTiles_ = 0;
 
+	/*-------------- 関数 --------------*/
 	Math math;
 };

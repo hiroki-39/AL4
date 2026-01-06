@@ -1,4 +1,5 @@
 #include "Bullet.h"
+#include <cmath>
 #include <cassert>
 
 void Bullet::Initialize(KamataEngine::Model* model, KamataEngine::Camera* camera, const KamataEngine::Vector3& position, const KamataEngine::Vector3& direction) {
@@ -23,6 +24,9 @@ void Bullet::Initialize(KamataEngine::Model* model, KamataEngine::Camera* camera
 	velocity_ = direction * kBulletSpeed;
 
 	isShot_ = true;
+
+	// 追加: 初期位置での弾の傾き設定
+	SetRotationFromDirection(direction);
 }
 
 void Bullet::Update() {
@@ -81,4 +85,17 @@ void Bullet::worldTransformUpdate(KamataEngine::WorldTransform& worldtransfrom) 
 
 	// 定数バッファに転送
 	worldtransfrom.TransferMatrix();
+}
+
+// 追加: 方向ベクトルに合わせて弾を傾ける
+void Bullet::SetRotationFromDirection(const KamataEngine::Vector3& dir) {
+	// ベクトル長がゼロに近い場合は処理しない
+	if (math.Length(dir) < 1e-6f) return;
+
+	// 正規化して角度を算出（XY平面を想定）
+	KamataEngine::Vector3 nd = math.Normalize(dir);
+	float angle = atan2f(nd.y, nd.x); // +x を基準に反時計回りの角度（ラジアン）
+
+	// モデルが +X 方向を前方としている想定で Z 回転を設定
+	worldTransformBullet_.rotation_.z = angle;
 }

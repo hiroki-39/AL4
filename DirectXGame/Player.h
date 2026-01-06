@@ -110,6 +110,19 @@ public:
 
 	void ShootWire(const KamataEngine::Vector3& dir);
 
+	/*-------------- ワイヤー設定 API --------------*/
+	// ワイヤー発射で使うフック弾モデルとセグメント弾モデルを設定する（nullptr なら通常弾モデルを使用）
+	void SetWireModels(KamataEngine::Model* projectileModel, KamataEngine::Model* segmentModel);
+
+	// ワイヤーのフック弾速度（発射時の速度）
+	void SetWireProjectileSpeed(float speed);
+
+	// ワイヤーのセグメント間隔（表示用）
+	void SetWireSegmentSpacing(float spacing);
+
+	// ワイヤーの引っ張り速度
+	void SetWirePullSpeed(float speed);
+
 	/*-------------- アクセッサ --------------*/
 
 	KamataEngine::WorldTransform& GetWorldTransform() { return worldTransformPlayer_; }
@@ -253,22 +266,38 @@ private:
 	// ワイヤーが刺さった位置
 	KamataEngine::Vector3 wireHitPos_ = {};
 
-	// ワイヤーの飛行速度
+	// ワイヤーの飛行速度（既存メンバ、後方互換）
 	float wireSpeed_ = 0.6f;
 
 	// ワイヤーの最大射程
 	float wireMaxDistance_ = 25.0f;
 
-	// プル（引っ張り）速度
+	// プル（引っ張り）速度（既存メンバ）
 	float wirePullSpeed_ = 0.4f;
+
 	// ワイヤー用に作成した弾（フック＋等間隔で並べた弾）の管理
 	std::vector<Bullet*> wireBullets_;
 	// ワイヤー射出用の弾（飛翔するフック弾）へのポインタ（nullptr なら未発射）
 	Bullet* wireProjectile_ = nullptr;
 	// ワイヤーを構成する等間隔の間隔（大きめに）
+	// 既定値は下の wireSegmentSpacing_ にコピーされる
 	static inline const float kWireSegmentSpacing = 0.9f;
+
+	// インスタンスで変更可能なセグメント間隔（デフォルトは kWireSegmentSpacing）
+	float wireSegmentSpacing_ = kWireSegmentSpacing;
+
+	// 発射用フック弾のモデル（nullptr なら bulletModel_ を使う）
+	KamataEngine::Model* wireProjectileModel_ = nullptr;
+	// セグメント用弾のモデル（nullptr なら bulletModel_ を使う）
+	KamataEngine::Model* wireSegmentModel_ = nullptr;
+	// 発射フック弾の速度（インスタンス上で制御可能）
+	float wireProjectileSpeed_ = wireSpeed_;
+
 	// 引っ張り時に移動した距離を累積してセグメントを削除するためのアキュムレータ
 	float wirePullAccumulatedDistance_ = 0.0f;
+
+	// 狙いが下向きか（ワイヤーモード時に w / s で切り替え）
+	bool wireAimDown_ = false;
 
 	/*-------------- プレイヤーの当たり判定に関わる系 --------------*/
 
@@ -316,6 +345,16 @@ private:
 	bool wallTouchFromWire_ = false;
 	float wallTouchFromWireTimer_ = 0.0f;
 	static inline const float kWallTouchFromWireWindow = 0.25f; // 有効時間（秒）
+
+	/*-------------- 滑空（グライド）に関わる系 --------------*/
+	// ワイヤー解除時に空中で滑空するフラグ
+	bool gliding_ = false;
+	// 滑空タイマー（経過で解除） 
+	float glideTimer_ = 0.0f;
+	// 滑空時間（秒）
+	static inline const float kGlideDuration = 1.5f;
+	// 滑空時の重力軽減倍率（0..1）
+	static inline const float kGlideGravityScale = 0.25f;
 
 	/*-------------- 関数 --------------*/
 

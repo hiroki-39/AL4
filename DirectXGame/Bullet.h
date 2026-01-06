@@ -50,6 +50,14 @@ public:
 	// 当たり（ブロックに刺さった）フラグ
 	bool IsHooked() const { return hooked_; }
 
+	void SetVelocity(const KamataEngine::Vector3& v) { velocity_ = v; }
+
+	void SetScale(const KamataEngine::Vector3& s) {
+		worldTransformBullet_.scale_ = s;
+	}
+
+	void SetRotationFromDirection(const KamataEngine::Vector3& dir);
+
 private:
 	// 弾のワールドトランスフォーム
 	KamataEngine::WorldTransform worldTransformBullet_;

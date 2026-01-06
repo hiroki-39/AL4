@@ -127,17 +127,23 @@ private:
 
 	KamataEngine::Sprite* reloadSprite;
 
-	//操作方法UI
+	// 操作方法UI
 	uint32_t operationTexHandle;
 	KamataEngine::Sprite* operationSprite;
 
-	//目標UI
+	// 目標UI
 	uint32_t targetTexHandle;
 	KamataEngine::Sprite* targetSprite;
 
 	// 敵の数用UI
 	uint32_t enemyCountTexHandle[10];
 	KamataEngine::Sprite* enemyCountSprite[10];
+
+	// サウンドデータハンドル
+	int32_t soundHandle_ = 0;
+
+	// BGM再生ハンドル
+	uint32_t bgmHandle_ = 0;
 
 	/*---関数---*/
 	Math* math;
