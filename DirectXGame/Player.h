@@ -339,12 +339,14 @@ private:
 	static inline const float kWallKickHorizontal = 0.6f;
 
 	// 壁キックの縦方向初速（上方向）
-	static inline const float kWallKickVertical = 1.2f;
+	static inline const float kWallKickVertical = 1.35f;
 
 	// ワイヤーで壁に当たった直後に壁ジャンプを許可するフラグ（短時間のみ有効）
 	bool wallTouchFromWire_ = false;
 	float wallTouchFromWireTimer_ = 0.0f;
 	static inline const float kWallTouchFromWireWindow = 0.25f; // 有効時間（秒）
+
+	bool isWallKicking_ = false;
 
 	/*-------------- 滑空（グライド）に関わる系 --------------*/
 	// ワイヤー解除時に空中で滑空するフラグ

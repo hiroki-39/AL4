@@ -31,7 +31,7 @@ void CameraController::Update() {
 	const WorldTransform& targetWordTransform = target_->GetWorldTransform();
 	const Vector3& targetVelocity = target_->getvelocity();
 
-	// 追尾対象とオフセットと追尾対象の速度からカメラ「目標座標」を計算（補正前）
+	// 追尾対象とオフセットと追尾対象の速度からカメラ「目標座標」を計算
 	targetposition_ = targetWordTransform.translation_ + targetOffset_ + targetVelocity * kVelocitybias;
 
 	// 可動領域にマージンを加えた最終クランプ境界
@@ -41,16 +41,14 @@ void CameraController::Update() {
 	const float maxY = movaleArea_.top + margin.top;
 
 	// 目標座標をクランプして補間する。
-	// 重要: movaleArea_ は SetMapField でビューポート+パディング分を縮めて設定しているため、
-	// プレイヤーがマップ端から paddingTiles_ 分手前に達したらここで追従が止まる。
 	Vector3 clampedTarget = targetposition_;
 	clampedTarget.x = std::clamp(clampedTarget.x, minX, maxX);
 	clampedTarget.y = std::clamp(clampedTarget.y, minY, maxY);
 
-	// カメラ座標補間（現在座標 -> 「クランプ済み目標」へ）
+	// カメラ座標補間
 	camera_->translation_ = math.Lerp(camera_->translation_, clampedTarget, kInterpolationRate);
 
-	// 念のため最終的にもクランプ（補間誤差対策）
+	// 念のため最終的にもクランプ
 	camera_->translation_.x = std::clamp(camera_->translation_.x, minX, maxX);
 	camera_->translation_.y = std::clamp(camera_->translation_.y, minY, maxY);
 
@@ -70,7 +68,7 @@ void CameraController::Reset() {
 
 // マップ矩形を受け取り、ビューポートサイズ分だけ内側に縮めて可動範囲を設定する
 void CameraController::SetmovaleArea(const Rect& area) {
-	// カメラとターゲット間のZオフセット（正の距離）
+	// カメラとターゲット間のZオフセット
 	float camDist = std::abs(targetOffset_.z);
 
 	// 垂直半分のワールドサイズ： tan(fov/2) * distance
@@ -108,7 +106,7 @@ void CameraController::SetMapField(MapChipField* mapField, int paddingTiles) {
 		return;
 	}
 
-	// マップ四隅のワールド座標を取得（安全チェック付き）
+	// マップ四隅のワールド座標を取得
 	uint32_t numH = mapField_->GetNumBlockHorizontal();
 	uint32_t numV = mapField_->GetNumBlockVirtical();
 
@@ -132,7 +130,7 @@ void CameraController::SetMapField(MapChipField* mapField, int paddingTiles) {
 	float padX = static_cast<float>(paddingTiles_) * mapField_->GetBlockWidth();
 	float padY = static_cast<float>(paddingTiles_) * mapField_->GetBlockHeight();
 
-	// さらにビューポート半幅/半高さを考慮して内側に縮める（SetmovaleArea と同様だがパディングを追加）
+	// さらにビューポート半幅/半高さを考慮して内側に縮める
 	float camDist = std::abs(targetOffset_.z);
 	float halfVert = std::tan(camera_->fovAngleY * 0.5f) * camDist;
 	float halfHorz = halfVert * camera_->aspectRatio;

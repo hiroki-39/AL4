@@ -48,7 +48,7 @@ void GameScene::Initialize() {
 	// 3Dモデルの生成
 	modelEnemy_ = Model::CreateFromOBJ("target", true);
 
-	// 敵の生成（CSVのスポーン情報を使用）
+	// 敵の生成
 	if (mapchipField_) {
 		const auto& spawns = mapchipField_->GetEnemySpawns();
 		for (const auto& spawn : spawns) {
@@ -59,9 +59,6 @@ void GameScene::Initialize() {
 
 			// 敵の初期化
 			newEnemy->Initialize(modelEnemy_, &camera_, enemyPosition);
-
-			// 将来的に spawn.type に応じた初期設定を行う場合はここで switch する
-			// switch (spawn.type) { ... }
 
 			enemies_.push_back(newEnemy);
 		}
@@ -111,9 +108,8 @@ void GameScene::Initialize() {
 	// カメラコントローラーの初期化
 	cameraController_->Initialize(&camera_);
 
-	// ここでマップの範囲を元にカメラの可動範囲を設定する（タイル単位パディング：4）
 	if (mapchipField_) {
-		cameraController_->SetMapField(mapchipField_, 4); // これで「マップ端から4タイル手前」で追従が止まる
+		cameraController_->SetMapField(mapchipField_, 4); 
 	}
 
 	// 追尾対象を設定
@@ -472,7 +468,7 @@ void GameScene::Draw() {
 	// 目標UIの描画
 	targetSprite->Draw();
 
-	// --- 追加: 敵数表示 (右上) ---
+	// --- 敵数表示 (右上) ---
 	{
 		int alive = 0;
 		for (Enemy* e : enemies_) {
@@ -508,7 +504,7 @@ GameScene::~GameScene() {
 
 	// カメラの解放
 	delete debugCamera_;
-	// カメラコントローラーの解放（Initialize で new している）
+	// カメラコントローラーの解放
 	delete cameraController_;
 
 	// プレイヤーの解放
@@ -533,10 +529,10 @@ GameScene::~GameScene() {
 	for (Enemy* enemy : enemies_) {
 		delete enemy;
 	}
-	// 敵モデルの解放（CreateFromOBJ で取得しているため解放する）
+	// 敵モデルの解放
 	delete modelEnemy_;
 
-	// フェードの解放（new しているため解放する）
+	// フェードの解放
 	delete fade_;
 
 	// マップチップフィールドの解放
@@ -553,7 +549,7 @@ GameScene::~GameScene() {
 	delete reloadSprite;
 	delete operationSprite;
 
-	// --- 追加: 敵数スプライトの解放 ---
+	// ---  敵数スプライトの解放 ---
 	for (uint32_t i = 0; i < 10; i++) {
 		delete enemyCountSprite[i];
 	}

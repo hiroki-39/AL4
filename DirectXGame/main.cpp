@@ -86,7 +86,7 @@ void DrawScene() {
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// エンジンの初期化
-	KamataEngine::Initialize(L"LE2B_04_カトウ_ヒロキ_襲撃");
+	KamataEngine::Initialize(L"LE2B_04_カトウ_ヒロキ_旋撃");
 
 	// DirectXCommonインスタンスの取得
 	DirectXCommon* dxCommon = DirectXCommon::GetInstance();
