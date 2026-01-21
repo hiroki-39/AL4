@@ -22,12 +22,11 @@ void Player::Initialize(Model* model, Camera* camera, const Vector3& position) {
 	// 矢印サイズ（適宜調整）
 	arrowSprite->SetSize({48.0f, 48.0f});
 
-	// 重要: 回転・位置ズレを防ぐため中心を基準にする
 	// (スプライトの回転や拡大時に左上基準だと見た目がずれる)
 	arrowSprite->SetAnchorPoint({0.5f, 0.5f});
 
 	// 弾モデルの生成
-	bulletModel_ = Model::CreateFromOBJ("Block", true);
+	bulletModel_ = Model::CreateFromOBJ("bullet", true);
 
 	// ワールド変換の初期化
 	worldTransformPlayer_.Initialize();
@@ -170,11 +169,6 @@ void Player::Update() {
 		bullet->Update();
 	}
 
-	// Note:
-	// 死んだ弾の削除は Update の最後にまとめて行うようにしました。
-	// これにより同一ポインタを複数箇所で delete してしまう事態（double delete）を避け、
-	// wire 処理での削除は「IsDead() を立てる」だけに統一します。
-
 	// ----　マップの衝突判定　----
 
 	// 衝突情報を初期化
@@ -210,27 +204,39 @@ void Player::Update() {
 	}
 
 	// 壁キック入力処理
-	// 変更点: 通常のマップ当たり判定に加え、ワイヤーで当たった直後でも壁ジャンプ可能にする
-	if (!onGround_ && (collisionMapInfo.hitWall || wallTouchFromWire_) && Input::GetInstance()->PushKey(DIK_SPACE) && canWallKick_ && wallKickCooldown_ <= 0.0f) {
+	if (!onGround_ && (collisionMapInfo.hitWall || wallTouchFromWire_) && Input::GetInstance()->TriggerKey(DIK_SPACE) && canWallKick_ && wallKickCooldown_ <= 0.0f) {
 
-		// 壁の反対方向へ横方向初速を与え、上方向の初速を与える
+		// 上方向へジャンプ
 		velocity_.y = kWallKickVertical;
-		velocity_.x = (wallTouchDirection_ == LRDirection::kRight) ? -kWallKickHorizontal : kWallKickHorizontal;
 
-		// 状態更新
+		// 壁と逆方向へ跳ねる
+		if (wallTouchDirection_ == LRDirection::kRight) {
+			velocity_.x = -kWallKickHorizontal;
+			lrDirection_ = LRDirection::kLeft;
+		} else {
+			velocity_.x = kWallKickHorizontal;
+			lrDirection_ = LRDirection::kRight;
+		}
+
+		// 空中状態を維持
+		onGround_ = false;
+
+		// クールタイム開始（連続防止）
 		canWallKick_ = false;
 		wallKickCooldown_ = kWallKickCooldownTime;
 
-		// 方向も反転
-		lrDirection_ = (wallTouchDirection_ == LRDirection::kRight) ? LRDirection::kLeft : LRDirection::kRight;
+		isWallKicking_ = true;
 
-		// ワイヤー直当たりフラグは消しておく
-		wallTouchFromWire_ = false;
-		wallTouchFromWireTimer_ = 0.0f;
+		// 壁キックはジャンプ回数を消費しない or 消費扱いにするなら 2 に
+		jumpCount_ = 1;
 
-		// ジャンプで滑空を解除
+		// 落下系状態解除（あれば）
 		gliding_ = false;
 		glideTimer_ = 0.0f;
+	}
+
+	if (wallKickCooldown_ > 0.0f) {
+		wallKickCooldown_ -= (1.0f / 60.0f);
 	}
 
 	// 3.移動
@@ -265,7 +271,7 @@ void Player::Update() {
 		float destinationRotationYTable[] = {std::numbers::pi_v<float> / 2.0f, std::numbers::pi_v<float> * 3.0f / 2.0f};
 
 		// 状態に応じた角度を取得
-		float destinationRotationY = destinationRotationYTable[static_cast<uint32_t>(lrDirection_)] ;
+		float destinationRotationY = destinationRotationYTable[static_cast<uint32_t>(lrDirection_)];
 
 		// 自キャラの角度を設定
 		worldTransformPlayer_.rotation_.y = math.EaseInOut(t, turnFirstRotationY_, destinationRotationY);
@@ -658,8 +664,9 @@ void Player::move() {
 		// 空中
 	} else {
 
+
 		// 二段ジャンプ
-		if (Input::GetInstance()->TriggerKey(DIK_SPACE) && jumpCount_ < 2) {
+		if (Input::GetInstance()->TriggerKey(DIK_SPACE) && jumpCount_ < 2 && !isWallKicking_) {
 
 			// 上方向の初速をリセット
 			velocity_.y = kJumpAcceleration * 1.2f;

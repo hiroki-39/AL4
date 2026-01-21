@@ -99,7 +99,6 @@ void Enemy::OnCollision(const Player* player) {
 	}
 
 	// プレイヤーの弾が当たった場合：非表示にする
-	// （描画を止め、衝突を無効化する）
 	isVisible_ = false;
 	isCollisionDisabled_ = true;
 
