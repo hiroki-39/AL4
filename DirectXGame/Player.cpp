@@ -62,6 +62,15 @@ void Player::Update() {
 		fireTimer_ -= 1.0f / 60.0f;
 	}
 
+	// 壁キックロックタイマーの更新（wall kick による二段ジャンプ抑止用）
+	if (wallKickLockTimer_ > 0.0f) {
+		wallKickLockTimer_ -= 1.0f / 60.0f;
+		if (wallKickLockTimer_ <= 0.0f) {
+			wallKickLockTimer_ = 0.0f;
+			isWallKicking_ = false; // 一定時間経過で壁キック状態を解除（これで二段ジャンプは短時間のみ抑止される）
+		}
+	}
+
 	// ---- ワイヤーモード処理 ----
 	// ワイヤー角度の更新
 	if (fireMode_ == FireMode::Wire) {
@@ -131,20 +140,26 @@ void Player::Update() {
 		}
 
 	} else if (fireMode_ == FireMode::Wire) {
+		// ワイヤーは「wireMode_ == None」かつ発射ロックが解除されているときのみ発射を許可する
 		if (Input::GetInstance()->TriggerKey(DIK_J)) {
+			if (wireMode_ == WireMode::None && !wireShotLocked_) {
 
-			// 角度（度 → ラジアン）
-			float rad = wireAngle_ * (3.14159f / 180.0f);
+				// 角度（度 → ラジアン）
+				float rad = wireAngle_ * (3.14159f / 180.0f);
 
-			// プレイヤーの向いている左右方向
-			float dirX = (lrDirection_ == LRDirection::kRight) ? 1.0f : -1.0f;
+				// プレイヤーの向いている左右方向
+				float dirX = (lrDirection_ == LRDirection::kRight) ? 1.0f : -1.0f;
 
-			// ワイヤー方向ベクトル
-			// Y 成分の符号は wireAimDown_ で選択（上向きなら正、下向きなら負）
-			float vy = (wireAimDown_) ? -fabsf(sinf(rad)) : fabsf(sinf(rad));
-			Vector3 wireDir = {dirX * cosf(rad), vy, 0.0f};
+				// ワイヤー方向ベクトル
+				// Y 成分の符号は wireAimDown_ で選択（上向きなら正、下向きなら負）
+				float vy = (wireAimDown_) ? -fabsf(sinf(rad)) : fabsf(sinf(rad));
+				Vector3 wireDir = {dirX * cosf(rad), vy, 0.0f};
 
-			ShootWire(wireDir); // ワイヤー射出処理
+				ShootWire(wireDir); // ワイヤー射出処理
+
+				// 発射ロックを有効化（ワイヤーの処理が完了するまで追加発射をブロック）
+				wireShotLocked_ = true;
+			}
 		}
 	}
 
@@ -183,6 +198,7 @@ void Player::Update() {
 	// 壁キッククールタイム減少
 	if (wallKickCooldown_ > 0.0f) {
 		wallKickCooldown_ -= 1.0f / 60.0f;
+		if (wallKickCooldown_ < 0.0f) wallKickCooldown_ = 0.0f;
 	}
 
 	// ワイヤーで壁に当たった直後の許可時間を減らす
@@ -204,6 +220,7 @@ void Player::Update() {
 	}
 
 	// 壁キック入力処理
+	// 条件: 空中、壁接触/ワイヤー由来の触れ、スペース押下、canWallKick_、クールタイム無し
 	if (!onGround_ && (collisionMapInfo.hitWall || wallTouchFromWire_) && Input::GetInstance()->TriggerKey(DIK_SPACE) && canWallKick_ && wallKickCooldown_ <= 0.0f) {
 
 		// 上方向へジャンプ
@@ -225,18 +242,15 @@ void Player::Update() {
 		canWallKick_ = false;
 		wallKickCooldown_ = kWallKickCooldownTime;
 
+		// 壁キック中フラグ（任意）
 		isWallKicking_ = true;
 
-		// 壁キックはジャンプ回数を消費しない or 消費扱いにするなら 2 に
-		jumpCount_ = 1;
+		// 壁ジャンプ後は二段ジャンプを使えないように jumpCount_ を消費（着地でリセット）
+		jumpCount_ = 2;
 
 		// 落下系状態解除（あれば）
 		gliding_ = false;
 		glideTimer_ = 0.0f;
-	}
-
-	if (wallKickCooldown_ > 0.0f) {
-		wallKickCooldown_ -= (1.0f / 60.0f);
 	}
 
 	// 3.移動
@@ -250,7 +264,7 @@ void Player::Update() {
 	// 接地判定
 	UpdateOnGround(collisionMapInfo);
 
-	// 壁接触処理（速度の減衰など）
+	// 壁接触処理（速度の減衰など）及び canWallKick_ のセット（ただし一度 wallKicked_ したら reset しない）
 	UpdateOnWall(collisionMapInfo);
 
 	/*-------------- 旋回制御 --------------*/
@@ -333,6 +347,9 @@ void Player::Update() {
 
 				wireMode_ = WireMode::None;
 
+				// 発射ロック解除（ワイヤー処理が終了した）
+				wireShotLocked_ = false;
+
 			} else if (wireProjectile_->IsHooked()) {
 
 				// フック弾がブロックに刺さった -> 引っ張りに移行
@@ -394,6 +411,9 @@ void Player::Update() {
 				glideTimer_ = kGlideDuration;
 			}
 			wireMode_ = WireMode::None;
+
+			// 発射ロック解除（ワイヤー処理が終了した）
+			wireShotLocked_ = false;
 		}
 
 	} else if (wireMode_ == WireMode::Pulling) {
@@ -423,6 +443,9 @@ void Player::Update() {
 
 			wireBullets_.clear();
 			wireProjectile_ = nullptr;
+
+			// 発射ロック解除（ワイヤー処理が終了した）
+			wireShotLocked_ = false;
 
 		} else {
 			// 正規化（距離が非常に小さい場合はゼロベクトルを使う）
@@ -472,6 +495,9 @@ void Player::Update() {
 
 				wireBullets_.clear();
 				wireProjectile_ = nullptr;
+
+				// 発射ロック解除（ワイヤー処理が終了した）
+				wireShotLocked_ = false;
 
 			} else {
 
@@ -666,7 +692,9 @@ void Player::move() {
 
 
 		// 二段ジャンプ
-		if (Input::GetInstance()->TriggerKey(DIK_SPACE) && jumpCount_ < 2 && !isWallKicking_) {
+		// 注意: 壁ジャンプで jumpCount_ を 2 にセットしているため、
+		// 壁ジャンプ後はここが真にならず二段ジャンプが出来なくなる（要求通り）。
+		if (Input::GetInstance()->TriggerKey(DIK_SPACE) && jumpCount_ < 2) {
 
 			// 上方向の初速をリセット
 			velocity_.y = kJumpAcceleration * 1.2f;
@@ -686,6 +714,7 @@ void Player::move() {
 
 		// 空中での左右「簡易制御」を追加（ワイヤー衝突後も左右移動できるようにする）
 		if (Input::GetInstance()->PushKey(DIK_D) || Input::GetInstance()->PushKey(DIK_A)) {
+
 			if (Input::GetInstance()->PushKey(DIK_D)) {
 				// 反対向きの減速（ブレーキ）
 				if (velocity_.x < 0.0f)
@@ -1076,6 +1105,9 @@ void Player::UpdateOnGround(const CollisionMapInfo& info) {
 			// 着地で滑空を解除
 			gliding_ = false;
 			glideTimer_ = 0.0f;
+
+			// 着地で wall kick 中フラグを解除
+			isWallKicking_ = false;
 		}
 	}
 }

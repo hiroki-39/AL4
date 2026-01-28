@@ -299,6 +299,9 @@ private:
 	// 狙いが下向きか（ワイヤーモード時に w / s で切り替え）
 	bool wireAimDown_ = false;
 
+	// 発射中のワイヤー再発射防止フラグ（発射後、ワイヤー処理終了まで再発射不可にする）
+	bool wireShotLocked_ = false;
+
 	/*-------------- プレイヤーの当たり判定に関わる系 --------------*/
 
 	// マップチップによるフィールド
@@ -346,9 +349,17 @@ private:
 	float wallTouchFromWireTimer_ = 0.0f;
 	static inline const float kWallTouchFromWireWindow = 0.25f; // 有効時間（秒）
 
+	// 壁キック直後の「一時的な状態」フラグ
 	bool isWallKicking_ = false;
 
-	/*-------------- 滑空（グライド）に関わる系 --------------*/
+	// 壁キックを一回のみ許可するためのフラグ
+	bool wallKicked_ = false;
+
+	// isWallKicking_ を自動で解除するためのタイマー
+	float wallKickLockTimer_ = 0.0f;
+	static inline const float kWallKickLockDuration = 0.15f;
+
+	/*-------------- 滑空に関わる系 --------------*/
 	// ワイヤー解除時に空中で滑空するフラグ
 	bool gliding_ = false;
 	// 滑空タイマー（経過で解除） 

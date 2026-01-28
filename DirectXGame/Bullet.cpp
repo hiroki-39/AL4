@@ -1,6 +1,6 @@
 #include "Bullet.h"
-#include <cmath>
 #include <cassert>
+#include <cmath>
 
 void Bullet::Initialize(KamataEngine::Model* model, KamataEngine::Camera* camera, const KamataEngine::Vector3& position, const KamataEngine::Vector3& direction) {
 
@@ -25,7 +25,7 @@ void Bullet::Initialize(KamataEngine::Model* model, KamataEngine::Camera* camera
 
 	isShot_ = true;
 
-	// 追加: 初期位置での弾の傾き設定
+	// 初期位置での弾の傾き設定
 	SetRotationFromDirection(direction);
 }
 
@@ -55,7 +55,7 @@ void Bullet::Update() {
 
 		if (type == MapChipType::kBlock) {
 			if (persistent_) {
-				// ワイヤー弾：ブロックに刺さって停止する（以後描画は残す）
+				// ワイヤー弾：ブロックに刺さって停止する
 				velocity_ = {0.0f, 0.0f, 0.0f};
 				hooked_ = true;
 			} else {
@@ -87,15 +87,16 @@ void Bullet::worldTransformUpdate(KamataEngine::WorldTransform& worldtransfrom) 
 	worldtransfrom.TransferMatrix();
 }
 
-// 追加: 方向ベクトルに合わせて弾を傾ける
+// 方向ベクトルに合わせて弾を傾ける
 void Bullet::SetRotationFromDirection(const KamataEngine::Vector3& dir) {
 	// ベクトル長がゼロに近い場合は処理しない
-	if (math.Length(dir) < 1e-6f) return;
+	if (math.Length(dir) < 1e-6f)
+		return;
 
-	// 正規化して角度を算出（XY平面を想定）
+	// 正規化して角度を算出
 	KamataEngine::Vector3 nd = math.Normalize(dir);
-	float angle = atan2f(nd.y, nd.x); // +x を基準に反時計回りの角度（ラジアン）
+	// 反時計回りの角度（ラジアン）
+	float angle = atan2f(nd.y, nd.x);
 
-	// モデルが +X 方向を前方としている想定で Z 回転を設定
 	worldTransformBullet_.rotation_.z = angle;
 }
