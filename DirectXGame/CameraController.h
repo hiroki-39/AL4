@@ -41,7 +41,6 @@ public:
 	void SetmovaleArea(const Rect& area);
 
 	// マップ情報を渡して「タイル単位のパディング」で可動範囲を設定する
-	// paddingTiles: カメラが止まる位置をマップ端から何タイル手前にするか（デフォルト 4）
 	void SetMapField(MapChipField* mapField, int paddingTiles = 4);
 
 private:

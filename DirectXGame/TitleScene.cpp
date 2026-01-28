@@ -109,7 +109,7 @@ void TitleScene::Update() {
 		break;
 	}
 
-	// フレーム時間（固定60FPS想定）
+	// フレーム時間
 	const float dt = 1.0f / 60.0f;
 
 	// 既存のタイトル3Dモデルの上下移動用カウンタ
@@ -120,8 +120,8 @@ void TitleScene::Update() {
 
 	worldTransformTitle_.translation_.y = std::sin(angle) + 10.0f;
 
-	// 追加: タイトルスプライトの上下移動（スクリーン座標）
-	// カウンタを進めるのを忘れない（ここが無かったため動かなかった）
+	
+	// カウンタを進める
 	titleSpriteCounter_ += dt;
 	titleSpriteCounter_ = std::fmod(titleSpriteCounter_, titleSpritePeriod_);
 
@@ -131,12 +131,12 @@ void TitleScene::Update() {
 	// スプライトの位置を更新
 	titleSprite_->SetPosition({titleSpriteBasePos_.x, titleSpriteBasePos_.y + titleOffsetY});
 
-	// 追加: スタートボタンの点滅（アルファ変化）
+	//  スタートボタンの点滅
 	buttonBlinkCounter_ += dt;
 	buttonBlinkCounter_ = std::fmod(buttonBlinkCounter_, buttonBlinkPeriod_);
-	// サイン波で 0..1 のアルファを作る（中央振幅調整）
+	// サイン波で 0..1 のアルファを作る
 	float blinkAlpha = 0.5f * (1.0f + std::sin((buttonBlinkCounter_ / buttonBlinkPeriod_) * 2.0f * std::numbers::pi_v<float>));
-	// 最低アルファを確保したければ clamp する（例: 0.2〜1.0）
+	// 最低アルファを確保したければ clamp する
 	blinkAlpha = std::clamp(blinkAlpha, 0.2f, 1.0f);
 	// ボタンの色にアルファを設定
 	buttonSprite_->SetColor(Vector4(buttonBaseColor_.x, buttonBaseColor_.y, buttonBaseColor_.z, blinkAlpha));
