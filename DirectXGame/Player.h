@@ -139,8 +139,9 @@ public:
 	// 弾リストの読み取り用アクセサ（GameScene から当たり判定に利用）
 	const std::list<Bullet*>& GetBullets() const { return bullets_; }
 
+
 private:
-	/*---  ---*/
+
 	uint32_t arrowHandle;
 
 	KamataEngine::Sprite* arrowSprite;
@@ -283,14 +284,14 @@ private:
 	// 既定値は下の wireSegmentSpacing_ にコピーされる
 	static inline const float kWireSegmentSpacing = 0.9f;
 
-	// インスタンスで変更可能なセグメント間隔（デフォルトは kWireSegmentSpacing）
+	// インスタンスで変更可能なセグメント間隔
 	float wireSegmentSpacing_ = kWireSegmentSpacing;
 
-	// 発射用フック弾のモデル（nullptr なら bulletModel_ を使う）
+	// 発射用フック弾のモデル
 	KamataEngine::Model* wireProjectileModel_ = nullptr;
-	// セグメント用弾のモデル（nullptr なら bulletModel_ を使う）
+	// セグメント用弾のモデル
 	KamataEngine::Model* wireSegmentModel_ = nullptr;
-	// 発射フック弾の速度（インスタンス上で制御可能）
+	// 発射フック弾の速度
 	float wireProjectileSpeed_ = wireSpeed_;
 
 	// 引っ張り時に移動した距離を累積してセグメントを削除するためのアキュムレータ
@@ -299,7 +300,7 @@ private:
 	// 狙いが下向きか（ワイヤーモード時に w / s で切り替え）
 	bool wireAimDown_ = false;
 
-	// 発射中のワイヤー再発射防止フラグ（発射後、ワイヤー処理終了まで再発射不可にする）
+	// 発射中のワイヤー再発射防止フラグ
 	bool wireShotLocked_ = false;
 
 	/*-------------- プレイヤーの当たり判定に関わる系 --------------*/
@@ -328,14 +329,14 @@ private:
 
 	/*-------------- 壁キックに関わる系 --------------*/
 
-	// 壁キック可能か（再度壁に接触してリセットされる）
+	// 壁キック可能か
 	bool canWallKick_ = false;
 
-	// 壁キック後のクールタイム（再キック防止）
+	// 壁キック後のクールタイム
 	float wallKickCooldown_ = 0.0f;
 	static inline const float kWallKickCooldownTime = 0.25f;
 
-	// 最後に触れた壁の方向（壁キックで離れる方向の決定に使用）
+	// 最後に触れた壁の方向
 	LRDirection wallTouchDirection_ = LRDirection::kRight;
 
 	// 壁キックの横方向初速（壁から離れる向き）
@@ -360,6 +361,7 @@ private:
 	static inline const float kWallKickLockDuration = 0.15f;
 
 	/*-------------- 滑空に関わる系 --------------*/
+
 	// ワイヤー解除時に空中で滑空するフラグ
 	bool gliding_ = false;
 	// 滑空タイマー（経過で解除） 

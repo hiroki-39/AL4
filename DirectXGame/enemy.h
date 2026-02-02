@@ -2,6 +2,7 @@
 #include "math.h"
 #include "KamataEngine.h"
 #include "Player.h"
+#include "MapChipField.h"
 
 class Player;
 
@@ -9,7 +10,7 @@ class Enemy {
 public:
 	enum class Behavior {
 		kUnknown = -1,
-		// 歩行
+		// 歩行（汎用）
 		kWalk,
 		// やられ状態
 		kDefeated
@@ -46,9 +47,25 @@ public:
 
 	bool IsCollisionDisabled() const { return isCollisionDisabled_; }
 
+	// 種類アクセス
+	void SetType(EnemyType t) { type_ = t; }
+	EnemyType GetType() const { return type_; }
+
+	// プレイヤー参照をセット（逃走挙動で使う）
+	void SetPlayer( Player* p) { player_ = p; }
+
+	// マップ情報をセット（逃走時の境界チェックで使用）
+	void SetMapChipField(MapChipField* m) { mapField_ = m; }
+
 private:
+	// 敵タイプ
+	EnemyType type_ = EnemyType::kNone;
+
 	// ワールド変換データ
 	KamataEngine::WorldTransform worldTransformEnemy_;
+
+	// 初期位置（振る舞い用）
+	KamataEngine::Vector3 initialPosition_ = {};
 
 	// モデル
 	KamataEngine::Model* model_ = nullptr;
@@ -56,8 +73,18 @@ private:
 	// カメラ
 	KamataEngine::Camera* camera_ = nullptr;
 
-	// 歩行速度
+	// 歩行速度（汎用）
 	static inline const float kWalkSpeed = 0.02f;
+
+	// LR/UD 特有パラメータ
+	static inline const float kLRAmplitude = 2.0f;
+	static inline const float kLRFrequency = 0.8f;
+	static inline const float kUDAmplitude = 1.2f;
+	static inline const float kUDFrequency = 0.9f;
+
+	// 逃走速度、閾値
+	static inline const float kFleeSpeed = 0.2f;
+	static inline const float kFleeTriggerDist = 10.0f;
 
 	// 速度
 	KamataEngine::Vector3 velocity_ = {};
@@ -66,6 +93,9 @@ private:
 	static inline const float kWidth = 1.6f;
 
 	static inline const float kHeight = 1.5f;
+
+	// 微小オフセット（プレイヤー側と同値を用意）
+	static inline const float kBlank = 0.001f;
 
 	// デスフラグ
 	bool isDead_ = false;
@@ -88,7 +118,6 @@ private:
 	// 無効化フラグ
 	bool isCollisionDisabled_ = false;
 
-	// 表示フラグ（弾に当たったら false にして描画を止める）
 	bool isVisible_ = true;
 
 	/*-------------- アニメーションの設定 --------------*/
@@ -104,6 +133,12 @@ private:
 
 	// 時間
 	float walkTimer = 0.0f;
+
+	/*-------------- プレイヤー参照（逃走用） --------------*/
+	Player* player_ = nullptr;
+
+	/*-------------- マップ参照（境界チェック用） --------------*/
+	MapChipField* mapField_ = nullptr;
 
 	/*-------------- 関数 --------------*/
 

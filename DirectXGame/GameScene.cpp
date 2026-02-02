@@ -45,8 +45,25 @@ void GameScene::Initialize() {
 #pragma region "敵"
 	/*-------------- 敵の初期化 --------------*/
 
-	// 3Dモデルの生成
+	// 敵のモデルを種類ごとに用意
 	modelEnemy_ = Model::CreateFromOBJ("target", true);
+
+	// 種類別モデル（見つからなければデフォルトにフォールバック）
+	modelEnemyLR_ = Model::CreateFromOBJ("target", true);
+	if (!modelEnemyLR_)
+		modelEnemyLR_ = modelEnemy_;
+
+	modelEnemyUD_ = Model::CreateFromOBJ("target1", true);
+	if (!modelEnemyUD_)
+		modelEnemyUD_ = modelEnemy_;
+
+	modelEnemySplit_ = Model::CreateFromOBJ("target2", true);
+	if (!modelEnemySplit_)
+		modelEnemySplit_ = modelEnemy_;
+
+	modelEnemyFlee_ = Model::CreateFromOBJ("target3", true);
+	if (!modelEnemyFlee_)
+		modelEnemyFlee_ = modelEnemy_;
 
 	// 敵の生成
 	if (mapchipField_) {
@@ -57,9 +74,32 @@ void GameScene::Initialize() {
 			// マップチップ座標をワールド座標に変換して初期位置とする
 			Vector3 enemyPosition = mapchipField_->GetMapChipPositionByIndex(spawn.index.xIndex, spawn.index.yIndex);
 
-			// 敵の初期化
-			newEnemy->Initialize(modelEnemy_, &camera_, enemyPosition);
+			KamataEngine::Model* useModel = modelEnemy_;
+			switch (spawn.type) {
+			case EnemyType::kLR:
+				useModel = modelEnemyLR_;
+				break;
+			case EnemyType::kUD:
+				useModel = modelEnemyUD_;
+				break;
+			case EnemyType::kSplit:
+				useModel = modelEnemySplit_;
+				break;
+			case EnemyType::kFlee:
+				useModel = modelEnemyFlee_;
+				break;
+			default:
+				useModel = modelEnemy_;
+				break;
+			}
 
+			// 敵の初期化
+			newEnemy->Initialize(useModel, &camera_, enemyPosition);
+
+			// 種類とプレイヤー参照をセット
+			newEnemy->SetType(spawn.type);
+			newEnemy->SetPlayer(player_);
+			newEnemy->SetMapChipField(mapchipField_);
 			enemies_.push_back(newEnemy);
 		}
 	}
@@ -109,7 +149,7 @@ void GameScene::Initialize() {
 	cameraController_->Initialize(&camera_);
 
 	if (mapchipField_) {
-		cameraController_->SetMapField(mapchipField_, 4); 
+		cameraController_->SetMapField(mapchipField_, 4);
 	}
 
 	// 追尾対象を設定
@@ -529,8 +569,17 @@ GameScene::~GameScene() {
 	for (Enemy* enemy : enemies_) {
 		delete enemy;
 	}
-	// 敵モデルの解放
-	delete modelEnemy_;
+	
+	if (modelEnemyLR_ && modelEnemyLR_ != modelEnemy_)
+		delete modelEnemyLR_;
+	if (modelEnemyUD_ && modelEnemyUD_ != modelEnemy_)
+		delete modelEnemyUD_;
+	if (modelEnemySplit_ && modelEnemySplit_ != modelEnemy_)
+		delete modelEnemySplit_;
+	if (modelEnemyFlee_ && modelEnemyFlee_ != modelEnemy_)
+		delete modelEnemyFlee_;
+	if (modelEnemy_)
+		delete modelEnemy_;
 
 	// フェードの解放
 	delete fade_;
@@ -627,6 +676,9 @@ void GameScene::CheckAllCollisions() {
 		// プレイヤーの弾リストを取得
 		const std::list<Bullet*>& bullets = player_->GetBullets();
 
+		// 新規生成された敵を一時的に保持して後で追加する
+		std::vector<Enemy*> spawnedEnemies;
+
 		// 各敵に対して当たり判定
 		for (Enemy* enemy : enemies_) {
 			if (!enemy)
@@ -651,8 +703,43 @@ void GameScene::CheckAllCollisions() {
 				// 弾（点）と敵のAABBの当たり判定（点がAABB内にあるか）
 				if (pos.x >= enemyAabb.min.x && pos.x <= enemyAabb.max.x && pos.y >= enemyAabb.min.y && pos.y <= enemyAabb.max.y && pos.z >= enemyAabb.min.z && pos.z <= enemyAabb.max.z) {
 
-					// 衝突時処理
-					enemy->OnCollision(player_);
+					// 種類別のヒット処理
+					if (enemy->GetType() == EnemyType::kSplit) {
+						// 分裂するタイプ: 当たったら分裂してから元をやられる
+						Vector3 center = enemy->GetWorldPosition();
+
+						// 2つ生成して左右に少しずらす
+						Enemy* child1 = new Enemy();
+						Enemy* child2 = new Enemy();
+
+						// 使用するモデルは分裂モデル（存在しなければ既存のターゲットにフォールバック）
+						// ここでは CreateFromOBJ を直接呼ぶ（GameScene 側で複数モデルを保持する改善は推奨）
+						KamataEngine::Model* childModel = Model::CreateFromOBJ("target", true);
+						if (!childModel)
+							childModel = Model::CreateFromOBJ("target", true);
+
+						child1->Initialize(childModel, &camera_, center + Vector3{-0.8f, 0.0f, 0.0f});
+						child2->Initialize(childModel, &camera_, center + Vector3{+0.8f, 0.0f, 0.0f});
+
+						// 子は左右移動にしておく
+						child1->SetType(EnemyType::kLR);
+						child2->SetType(EnemyType::kLR);
+
+						// プレイヤー参照もセット
+						child1->SetPlayer(player_);
+						child2->SetPlayer(player_);
+
+						// 一時的に追加
+						spawnedEnemies.push_back(child1);
+						spawnedEnemies.push_back(child2);
+
+						// 元の敵はやられる処理へ（弾で破壊）
+						enemy->OnCollision(player_);
+
+					} else {
+						// 通常処理: 敵に当たったことを通知
+						enemy->OnCollision(player_);
+					}
 
 					// 弾を消す（削除は Player::Update 内の remove_if に任せる）
 					bullet->Kill();
@@ -661,6 +748,11 @@ void GameScene::CheckAllCollisions() {
 					break;
 				}
 			}
+		}
+
+		// 生成された敵を末尾に追加（ループ中に vector を変更しないため）
+		for (Enemy* ne : spawnedEnemies) {
+			enemies_.push_back(ne);
 		}
 	}
 #pragma endregion
