@@ -9,7 +9,7 @@
 #include "enemy.h"
 #include <vector>
 
-class GameScene {
+    class GameScene {
 public:
 	/// <summary>
 	///	ゲームシーンの初期化
@@ -74,8 +74,12 @@ private:
 	/*-------------- 敵mob --------------*/
 	std::list<Enemy*> enemies_;
 
-	// 敵のモデル
-	KamataEngine::Model* modelEnemy_ = nullptr;
+	// 敵のモデル（種類別に保持）
+	KamataEngine::Model* modelEnemy_ = nullptr;      // デフォルト
+	KamataEngine::Model* modelEnemyLR_ = nullptr;    // 左右移動
+	KamataEngine::Model* modelEnemyUD_ = nullptr;    // 上下移動
+	KamataEngine::Model* modelEnemySplit_ = nullptr; // 分裂
+	KamataEngine::Model* modelEnemyFlee_ = nullptr;  // 逃げる
 
 	/*---ブロック---*/
 	std::vector<std::vector<KamataEngine::WorldTransform*>> worldTransformBlocks_;

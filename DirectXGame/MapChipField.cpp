@@ -16,9 +16,12 @@ std::map<std::string, MapChipType> mapChipTable = {
 };
 
 // 敵トークンテーブル（CSV内で敵を表すトークンをここに追加）
+// E1..E4 を使って種類を指定できるようにする
 std::map<std::string, EnemyType> enemyTable = {
-    {"E1", EnemyType::kSlime},
-    {"E2", EnemyType::kBat},
+    {"E1", EnemyType::kLR},    // 左右移動
+    {"E2", EnemyType::kUD},    // 上下移動
+    {"E3", EnemyType::kSplit}, // 分裂するターゲット
+    {"E4", EnemyType::kFlee},  // 近づくと逃げるターゲット
 };
 
 // 末尾の改行やスペース、CR を取り除く簡易トリム

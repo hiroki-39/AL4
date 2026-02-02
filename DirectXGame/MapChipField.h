@@ -11,9 +11,14 @@ enum class MapChipType {
 // 敵タイプ
 enum class EnemyType {
 	kNone,
-	kSlime,
-	kBat,
-	// 必要ならここに追加
+	// 左右に移動するターゲット
+	kLR,
+	// 上下に移動するターゲット
+	kUD,
+	// 壊すと分裂するターゲット
+	kSplit,
+	// プレイヤーが近づくと逃げるターゲット
+	kFlee,
 };
 
 // マップチップの構造体
